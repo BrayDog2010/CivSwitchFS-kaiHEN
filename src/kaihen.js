@@ -13,6 +13,7 @@ import {armEndpoint, readFs, writeFs} from "./kaihen/endpoint.mjs";
 import {deriveLayout, findLoaderRoot, readThreadRing} from "./kaihen/layout.mjs";
 import {dumpChainState} from "./kaihen/diff.mjs";
 import {threadSendProbe} from "./kaihen/threadsend.mjs";
+import {spinReadProbe} from "./kaihen/spinread.mjs";
 import {openNotifier, exportHandle, openInspectionDomain, copyLoaderRoot}
     from "./kaihen/objects.mjs";
 import {verifyNativeStubs, openPmSessions} from "./kaihen/pm.mjs";
@@ -220,6 +221,7 @@ export async function run() {
             // send on the copied handle (reference runs/switch2-5T5Brx).
             await dumpChainState(context);
             await threadSendProbe(context, RO_TITLE);
+            await spinReadProbe(context);
             if (Array.isArray(globalThis.__KH_SKIP) &&
                     globalThis.__KH_SKIP.includes("dx")) {
                 await khLog("DX experiments skipped (--skip dx)");
