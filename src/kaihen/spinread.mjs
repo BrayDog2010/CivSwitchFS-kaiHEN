@@ -71,15 +71,15 @@ export async function spinReadProbe(context, title) {
 
     const packets = [];   // {pkt, readBuf?}
     for (let r = 0; r < ROUNDS; r++) {
-        const wpktR = arenaAlloc(context, 0x1000, "sr-w-ref-" + r);
+        const wpktR = arenaAlloc(context, 0x100, "sr-w-ref-" + r);
         buildWritePkt(wpktR, srcRef, ep.dataEntryOffset + 0x20);
-        const rpktR = arenaAlloc(context, 0x1000, "sr-r-ref-" + r);
-        const bufR = arenaAlloc(context, 0x100, "sr-buf-ref-" + r);
+        const rpktR = arenaAlloc(context, 0x100, "sr-r-ref-" + r);
+        const bufR = arenaAlloc(context, 0x40, "sr-buf-ref-" + r);
         buildReadPkt(rpktR, bufR, ep.dataOffset);
-        const wpktE = arenaAlloc(context, 0x1000, "sr-w-ent-" + r);
+        const wpktE = arenaAlloc(context, 0x100, "sr-w-ent-" + r);
         buildWritePkt(wpktE, srcEnt, ep.dataEntryOffset + 0x20);
-        const rpktE = arenaAlloc(context, 0x1000, "sr-r-ent-" + r);
-        const bufE = arenaAlloc(context, 0x100, "sr-buf-ent-" + r);
+        const rpktE = arenaAlloc(context, 0x100, "sr-r-ent-" + r);
+        const bufE = arenaAlloc(context, 0x40, "sr-buf-ent-" + r);
         buildReadPkt(rpktE, bufE, ep.dataOffset);
         packets.push({wpktR, rpktR, bufR, wpktE, rpktE, bufE});
     }
@@ -87,14 +87,14 @@ export async function spinReadProbe(context, title) {
     const calls = [];
     for (const p of packets) {
         calls.push({fn: runtime.IPC_SEND_DISPATCHER,
-            args: [BigInt(cand), BigInt(p.wpktR), 0x1000n, 0n]});
+            args: [BigInt(cand), BigInt(p.wpktR), 0x100n, 0n]});
         calls.push({fn: runtime.IPC_SEND_DISPATCHER,
-            args: [BigInt(cand), BigInt(p.rpktR), 0x1000n, 0n]});
+            args: [BigInt(cand), BigInt(p.rpktR), 0x100n, 0n]});
         bufs.push({field: "ref", buf: p.bufR});
         calls.push({fn: runtime.IPC_SEND_DISPATCHER,
-            args: [BigInt(cand), BigInt(p.wpktE), 0x1000n, 0n]});
+            args: [BigInt(cand), BigInt(p.wpktE), 0x100n, 0n]});
         calls.push({fn: runtime.IPC_SEND_DISPATCHER,
-            args: [BigInt(cand), BigInt(p.rpktE), 0x1000n, 0n]});
+            args: [BigInt(cand), BigInt(p.rpktE), 0x100n, 0n]});
         bufs.push({field: "entry20", buf: p.bufE});
     }
     const frame = runtime.buildRawFrame(calls);
