@@ -95,14 +95,5 @@ export async function instantSendProbe(context, title) {
     } finally {
         await writeFs(context, entry20, oldPair);      // un-borrow
     }
-    // Retain the copied root when the code-open lived (the reference keeps
-    // its copied roots for later code-opens); close only the dead ones.
-    return {ok: true};
-}
-    // Retain the copied root when the code-open lived (the reference keeps
-    // its copied roots for later code-opens); close only the dead ones.
-    if (copyHandle && !context.instantCodeFs)
-        try { runtime.closeHandle(copyHandle); }
-        catch (error) { /* dead */ }
     return {ok: true};
 }
