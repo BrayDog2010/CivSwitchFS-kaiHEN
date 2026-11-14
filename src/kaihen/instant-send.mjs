@@ -13,7 +13,8 @@ import runtime from "../core/runtime.mjs";
 import {check, khLog, hex, arenaSlots, arenaAlloc, track, u64Bytes}
     from "./state.mjs";
 import {readFs, writeFs} from "./endpoint.mjs";
-import {cmifSend, bareSendTransport, buildCmif} from "./wire.mjs";
+import {cmifSend, bareSendTransport, buildCmif, cmifReply, oneMovedHandle}
+    from "./wire.mjs";
 
 export async function instantSendProbe(context, title) {
     const owned = context.inspectionDomain;
@@ -50,12 +51,24 @@ export async function instantSendProbe(context, title) {
             : 0xF601;
         await khLog("IS1 instant send copy=" + hex(copyRc) +
             " send=" + hex(sendRc) + " handle=" + hex(copyHandle));
-        if (sendRc === 0)
-            await khLog("IS2 ***LIVED*** — the killer is a race we can win");
+        if (sendRc === 0) {
+            const parsed = cmifReply(slots.pkt);
+            await khLog("IS2 ***LIVED*** result=" + hex(parsed.result) +
+                " moves=" + (parsed.moves ? parsed.moves.length : 0) +
+                " copies=" + (parsed.copies ? parsed.copies.length : 0));
+            if (parsed.result === 0 && parsed.moves && parsed.moves.length) {
+                context.instantCodeFs = track(context, parsed.moves[0],
+                    "is-codefs");
+                await khLog("IS3 code fs handle=" + hex(context.instantCodeFs));
+            }
+        }
     } finally {
         await writeFs(context, entry20, oldPair);
     }
-    if (copyHandle) try { runtime.closeHandle(copyHandle); }
-    catch (error) { /* dead */ }
+    // Retain the copied root when the code-open lived (the reference keeps
+    // its copied roots for later code-opens); close only the dead ones.
+    if (copyHandle && !context.instantCodeFs)
+        try { runtime.closeHandle(copyHandle); }
+        catch (error) { /* dead */ }
     return {ok: true};
 }

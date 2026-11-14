@@ -53,7 +53,14 @@ export function buildCmif(pkt, options) {
         runtime.write32(pkt + BigInt(at), BigInt(Number(size & 0xffffffffn)));
         runtime.write32(pkt + BigInt(at + 4),
             BigInt(Number(address & 0xffffffffn)));
-        const word2 = (1n | ((address >> 36n) & 7n) << 2n |
+        // Mode parity with the reference engine (shared/ipc.cjs descriptor):
+        // send buffers mode 0, receive buffers mode 3. The old mode-1 B
+        // descriptor transported fine via the TLS dispatcher (svc 0x21) but
+        // the bare SendSyncRequestWithUserBuffer wrapper (svc 0x22 — the
+        // reference's transport) rejected it on a LIVE session with kernel
+        // 0xE801 InvalidCombination (run51 IS: copy=0 send=0xE801).
+        const mode = aList.includes(descriptor) ? 0n : 3n;
+        const word2 = (mode | ((address >> 36n) & 7n) << 2n |
             ((size >> 32n) & 0xfn) << 24n |
             ((address >> 32n) & 15n) << 28n);
         runtime.write32(pkt + BigInt(at + 8), BigInt(Number(word2)));
