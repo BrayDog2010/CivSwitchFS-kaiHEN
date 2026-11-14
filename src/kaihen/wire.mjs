@@ -53,13 +53,15 @@ export function buildCmif(pkt, options) {
         runtime.write32(pkt + BigInt(at), BigInt(Number(size & 0xffffffffn)));
         runtime.write32(pkt + BigInt(at + 4),
             BigInt(Number(address & 0xffffffffn)));
-        // Mode parity with the reference engine (shared/ipc.cjs descriptor):
-        // send buffers mode 0, receive buffers mode 3. The old mode-1 B
-        // descriptor transported fine via the TLS dispatcher (svc 0x21) but
-        // the bare SendSyncRequestWithUserBuffer wrapper (svc 0x22 — the
-        // reference's transport) rejected it on a LIVE session with kernel
-        // 0xE801 InvalidCombination (run51 IS: copy=0 send=0xE801).
-        const mode = aList.includes(descriptor) ? 0n : 3n;
+        // Attribute parity with the recorded SDK traffic: send buffers
+        // attr 0, receive buffers attr 1 (NonSecureIpc). Empirical matrix
+        // (runs 74-79): WithContext reads attr 0 -> server kill, attr 3 ->
+        // server kill, attr 1 -> works (byte-for-byte the recording's read
+        buffer encoding); plain-protocol reads attr 3 -> server kill (run79
+        ro/main). The old note about a mode-1 B descriptor rejected with
+        0xE801 by the bare svc-0x22 wrapper (run51) was that run's copy
+        combination, not the attribute — the SDK itself sends attr 1.
+        const mode = aList.includes(descriptor) ? 0n : 1n;
         const word2 = (mode | ((address >> 36n) & 7n) << 2n |
             ((size >> 32n) & 0xfn) << 24n |
             ((address >> 32n) & 15n) << 28n);
