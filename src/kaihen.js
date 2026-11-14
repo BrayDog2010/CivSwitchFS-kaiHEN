@@ -15,6 +15,7 @@ import {dumpChainState} from "./kaihen/diff.mjs";
 import {threadSendProbe} from "./kaihen/threadsend.mjs";
 import {spinReadProbe} from "./kaihen/spinread.mjs";
 import {sessionBlockProbe} from "./kaihen/sessionblock.mjs";
+import {instantSendProbe} from "./kaihen/instant-send.mjs";
 import {openNotifier, exportHandle, openInspectionDomain, copyLoaderRoot}
     from "./kaihen/objects.mjs";
 import {verifyNativeStubs, openPmSessions} from "./kaihen/pm.mjs";
@@ -218,8 +219,11 @@ export async function run() {
         await stage("loader-copy", async () => {
             await openInspectionDomain(context);
             await copyLoaderRoot(context);
+            // The instant-send probe runs FIRST: its entire premise is that
+            // nothing sits between the copy and the first send.
+            await instantSendProbe(context, RO_TITLE);
             // State-diff dump in the author engine's proof schema, before any
-            // send on the copied handle (reference runs/switch2-5T5Brx).
+            // other send on the copied handle (reference runs/switch2-5T5Brx).
             await dumpChainState(context);
             await threadSendProbe(context, RO_TITLE);
             await spinReadProbe(context, RO_TITLE);
