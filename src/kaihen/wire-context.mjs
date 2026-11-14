@@ -67,7 +67,7 @@ export function buildContextPacket(pkt, options) {
 // object id (route follow-ups through it); `handle` is informational only.
 export function sendContext(context, object, options) {
     const pkt = options.pkt;
-    buildContextPacket(pkt, options);
+    buildContextPacket(pkt, {...options, object});
     const transport = bareSendTransport(context.inspectionDomain.handle, pkt);
     const words = [];
     for (let i = 0n; i < 16n; i++)
