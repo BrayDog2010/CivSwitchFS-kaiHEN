@@ -69,17 +69,23 @@ export async function spinReadProbe(context, title) {
     runtime.write64(srcRef, BigInt(refField));
     runtime.write64(srcEnt, BigInt(entry20));
 
+    // Slab allocations (the arena has an entry-count cap ~400; per-packet
+    // arenaAlloc calls exhaust it around round 59 regardless of size).
+    const PKT_STRIDE = 0x100, BUF_STRIDE = 0x40;
+    const pktSlab = arenaAlloc(context, ROUNDS * 4 * PKT_STRIDE, "sr-pkts");
+    const bufSlab = arenaAlloc(context, ROUNDS * 2 * BUF_STRIDE, "sr-bufs");
+
     const packets = [];   // {pkt, readBuf?}
     for (let r = 0; r < ROUNDS; r++) {
-        const wpktR = arenaAlloc(context, 0x100, "sr-w-ref-" + r);
+        const base = pktSlab + r * 4 * PKT_STRIDE;
+        const bufs = bufSlab + r * 2 * BUF_STRIDE;
+        const wpktR = base, rpktR = base + PKT_STRIDE;
+        const bufR = bufs;
+        const wpktE = base + 2 * PKT_STRIDE, rpktE = base + 3 * PKT_STRIDE;
+        const bufE = bufs + BUF_STRIDE;
         buildWritePkt(wpktR, srcRef, ep.dataEntryOffset + 0x20);
-        const rpktR = arenaAlloc(context, 0x100, "sr-r-ref-" + r);
-        const bufR = arenaAlloc(context, 0x40, "sr-buf-ref-" + r);
         buildReadPkt(rpktR, bufR, ep.dataOffset);
-        const wpktE = arenaAlloc(context, 0x100, "sr-w-ent-" + r);
         buildWritePkt(wpktE, srcEnt, ep.dataEntryOffset + 0x20);
-        const rpktE = arenaAlloc(context, 0x100, "sr-r-ent-" + r);
-        const bufE = arenaAlloc(context, 0x40, "sr-buf-ent-" + r);
         buildReadPkt(rpktE, bufE, ep.dataOffset);
         packets.push({wpktR, rpktR, bufR, wpktE, rpktE, bufE});
     }
