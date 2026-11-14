@@ -68,10 +68,16 @@ export async function instantSendProbe(context, title) {
                 input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
                 b: [{addr: info, size: 0x1a4}]});
             const t2 = bareSendTransport(copyHandle, slots.pkt);
-            let parsed = null;
-            if (t2 === 0) parsed = cmifReply(slots.pkt);
+            let d2 = "-", parsed = null;
+            if (t2 !== 0) {
+                buildCmif(slots.pkt, {cmd: 0,
+                    input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
+                    b: [{addr: info, size: 0x1a4}]});
+                d2 = hex(Number(sendIPC(copyHandle, slots.pkt)) >>> 0);
+                if (d2 === hex(0)) parsed = cmifReply(slots.pkt);
+            } else parsed = cmifReply(slots.pkt);
             await khLog("IS2 init=" + hex(init) + "/" + initR +
-                " code-open=" + hex(t2) +
+                " code-open bare=" + hex(t2) + " disp=" + d2 +
                 (parsed ? " result=" + hex(parsed.result) +
                     " moves=" + (parsed.moves ? parsed.moves.length : 0) : ""));
             if (parsed && parsed.result === 0 && parsed.moves &&
