@@ -11,7 +11,8 @@
 // Runs right after copyLoaderRoot + the state dump, before the DX block.
 
 import runtime from "../core/runtime.mjs";
-import {check, khLog, hex, u64Bytes, arenaSlots} from "./state.mjs";
+import {check, khLog, hex, u64Bytes, arenaSlots, arenaAlloc, track}
+    from "./state.mjs";
 import {buildCmif} from "./wire.mjs";
 
 const BARE_SEND_OFFSET = 0x168C54;
