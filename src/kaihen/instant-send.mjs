@@ -13,8 +13,10 @@ import runtime from "../core/runtime.mjs";
 import {check, khLog, hex, arenaSlots, arenaAlloc, track, u64Bytes}
     from "./state.mjs";
 import {readFs, writeFs} from "./endpoint.mjs";
-import {cmifSend, bareSendTransport, buildCmif, cmifReply, oneMovedHandle}
+import {cmifSend, bareSendTransport, buildCmif, oneMovedHandle}
     from "./wire.mjs";
+
+const {cmifReply} = runtime;
 
 export async function instantSendProbe(context, title) {
     const owned = context.inspectionDomain;
