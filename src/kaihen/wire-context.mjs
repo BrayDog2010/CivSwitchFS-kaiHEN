@@ -40,20 +40,28 @@ export function buildContextPacket(pkt, options) {
             BigInt(Number(address & 0xffffffffn)));
         at += 8;
     }
-    for (const d of bList) {                       // B: 3 words, mode 0/3
+    for (const d of bList) {                       // B: 3 words; attr in bits 0-1
         const address = BigInt(d.addr);
         runtime.write32(pkt + BigInt(at), BigInt(Number(d.size)));
         runtime.write32(pkt + BigInt(at + 4),
             BigInt(Number(address & 0xffffffffn)));
-        const mode = BigInt(d.mode || 0);          // 3 = server-writable
-        const flags = mode | (((address >> 32n) & 0xfn) << 28n) |
+        // Attribute bits 0-1 of the packed word: their read buffer used
+        // attr 1 (0xc0000009), their code-info buffer attr 0 (0x90000004).
+        // attr 0 and 3 both killed the domain on reads; 1 is the recorded
+        // working value. Address bits: 32-35 -> bits 28-31, 36-38 -> bits 2-4.
+        const attr = BigInt(d.attr || 0);
+        const flags = attr | (((address >> 32n) & 0xfn) << 28n) |
             (((address >> 36n) & 7n) << 2n);
         runtime.write32(pkt + BigInt(at + 8), BigInt(Number(flags)));
         at += 12;
     }
 
     const ctxAt = (at + 0xf) & ~0xf;               // align to 0x10
-    runtime.write32(pkt + BigInt(ctxAt), BigInt(CTX_TOKEN));
+    // Per-command TLS slot tokens observed in the recording: 0x0018 init,
+    // 0x0020 code-open, 0x0014 open-file, 0x0010 get-size, 0x0028 read.
+    // The server does not validate the slot against the command (our
+    // 0x0020-everywhere opens/sizes worked), but match them where known.
+    runtime.write32(pkt + BigInt(ctxAt), BigInt(options.token || CTX_TOKEN));
     runtime.write32(pkt + BigInt(ctxAt + 4), BigInt(options.object));
     const sfci = ctxAt + 0x10;
     runtime.write32(pkt + BigInt(sfci), 0x49434653n);      // SFCI
