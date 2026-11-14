@@ -360,7 +360,7 @@ export async function run() {
             }
             await khLog("SD check: " + (bad.length ?
                 "problems: " + bad.join(", ") : "all present"));
-            const optional = Object.keys(globalThis.__KH_MANIFEST)
+            const optional = Object.keys(globalThis.__KH_MANIFEST || {})
                 .filter(name => globalThis.__KH_MANIFEST[name].optional);
             const required = bad.filter(name =>
                 !optional.includes(name.replace(/\(.*\)$/, "")));
