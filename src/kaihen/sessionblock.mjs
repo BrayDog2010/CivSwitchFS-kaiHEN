@@ -114,8 +114,9 @@ export async function sessionBlockProbe(context, title) {
         return out;
     };
     let last = await readAll();
+    const dRefIdx = watches.findIndex(w => w.name === "D:ref");
     const trail = ["t0:N:ref=" + hex(Number(last[0] & 0xffffffffffn)) +
-        " D:ref=" + hex(Number(last[watches.findIndex(w => w.name === "D:ref")]] & 0xffffffffn))];
+        " D:ref=" + hex(Number(last[dRefIdx] & 0xffffffffn))];
     let flips = 0;
     for (let t = 1; t <= TRAIL_ROUNDS && flips < 24; t++) {
         await runtime.waitMs(TRAIL_GAP_MS);
