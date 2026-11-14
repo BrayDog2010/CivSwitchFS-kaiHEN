@@ -179,7 +179,9 @@ export async function captureCodeFile(context, codeObject, name, limit) {
                 .concat(u64Bytes(BigInt(sizeChunk))),
             b: [{addr: slots.data, size: sizeChunk}]});
         check(reply.transport === 0 && reply.result === 0,
-            "code read /" + name + " @" + at + ": result " + hex(reply.result));
+            "code read /" + name + " @" + at + ": transport " +
+            hex(reply.transport) + " result " + hex(reply.result) +
+            " [" + reply.words.map(w => hex(w)).join(" ") + "]");
         parts.push(readNative(slots.data, sizeChunk));
     }
     let all = [];
