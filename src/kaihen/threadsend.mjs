@@ -27,7 +27,7 @@ export async function threadSendProbe(context, title) {
     const info = arenaAlloc(context, 0x2000, "ts-info");
     buildCmif(slots.pkt, {cmd: 0,
         input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-        b: [{addr: info + 32n, size: 0x1a4}]});
+        b: [{addr: info, size: 0x1a4}]});
 
     const scheduling = runtime.borrowThreadScheduling();
     check(scheduling, "thread scheduling borrow failed");

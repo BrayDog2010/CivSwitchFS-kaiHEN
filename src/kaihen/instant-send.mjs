@@ -66,13 +66,19 @@ export async function instantSendProbe(context, title) {
             if (d1 === 0) r1 = hex(cmifReply(slots.pkt2).result);
             await khLog("IS2 trivial bare=" + hex(t1) +
                 " dispatcher=" + hex(d1) + " result=" + r1);
+            // The receive buffer MUST be page-aligned (the reference uses
+            // its 4096-aligned base+0x1000): an unaligned B descriptor
+            // transports through the TLS dispatcher but the kernel's
+            // WithUserBuffer path rejects it with 0xE801 InvalidCombination
+            // (run54 battery: no-descriptor trivial cmd transports 0 on
+            // both paths; only the unaligned-B code-open gets 0xE801).
             buildCmif(slots.pkt, {cmd: 0,
                 input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-                b: [{addr: info + 32n, size: 0x1a4}]});
+                b: [{addr: info, size: 0x1a4}]});
             const t2 = bareSendTransport(copyHandle, slots.pkt);
             buildCmif(slots.pkt, {cmd: 0,
                 input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-                b: [{addr: info + 32n, size: 0x1a4}]});
+                b: [{addr: info, size: 0x1a4}]});
             const d2 = Number(sendIPC(copyHandle, slots.pkt)) >>> 0;
             await khLog("IS3 code-open bare=" + hex(t2) +
                 " dispatcher=" + hex(d2));

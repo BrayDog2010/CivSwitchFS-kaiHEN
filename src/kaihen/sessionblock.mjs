@@ -134,7 +134,7 @@ export async function sessionBlockProbe(context, title) {
     const info = arenaAlloc(context, 0x2000, "sb-info");
     buildCmif(slots2.pkt, {cmd: 0,
         input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-        b: [{addr: info + 32n, size: 0x1a4}]});
+        b: [{addr: info, size: 0x1a4}]});
     const rc = bareSendTransport(copyHandle, slots2.pkt);
     const refEnd = readU64LE(await readFs(context, refField, 8), 0);
     await khLog("SB4 post-trail send rc=" + hex(rc) + " ref=" +

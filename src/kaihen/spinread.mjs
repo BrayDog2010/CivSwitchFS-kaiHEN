@@ -19,9 +19,10 @@ import {u64Bytes} from "./state.mjs";
 
 function buildCmifProbe(context, pkt, info, title) {
     // OpenCodeFileSystem on the copied root: the real first-use command.
+    // info (arena) is page-aligned — WithUserBuffer requires it.
     buildCmif(pkt, {cmd: 0,
         input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-        b: [{addr: info + 32n, size: 0x1a4}]});
+        b: [{addr: info, size: 0x1a4}]});
 }
 
 const ROUNDS = 60;   // 60 rounds x (ref, entry) = 120 samples. Frame size
