@@ -221,7 +221,7 @@ export async function run() {
             // send on the copied handle (reference runs/switch2-5T5Brx).
             await dumpChainState(context);
             await threadSendProbe(context, RO_TITLE);
-            await spinReadProbe(context);
+            await spinReadProbe(context, RO_TITLE);
             if (Array.isArray(globalThis.__KH_SKIP) &&
                     globalThis.__KH_SKIP.includes("dx")) {
                 await khLog("DX experiments skipped (--skip dx)");

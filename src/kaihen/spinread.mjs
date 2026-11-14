@@ -14,9 +14,17 @@ import runtime from "../core/runtime.mjs";
 import {check, khLog, hex, readU64LE, readU32LE, arenaAlloc, arenaSlots,
     track, readNative} from "./state.mjs";
 import {readFs, writeFs} from "./endpoint.mjs";
-import {cmifSend} from "./wire.mjs";
+import {cmifSend, bareSendTransport, buildCmif} from "./wire.mjs";
+import {u64Bytes} from "./state.mjs";
 
-const ROUNDS = 40;   // 40 rounds x (ref, entry) = 80 samples
+function buildCmifProbe(context, pkt, info, title) {
+    // OpenCodeFileSystem on the copied root: the real first-use command.
+    buildCmif(pkt, {cmd: 0,
+        input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
+        b: [{addr: info + 32n, size: 0x1a4}]});
+}
+
+const ROUNDS = 200;   // 200 rounds x (ref, entry) = 400 samples
 
 function buildReadPkt(pkt, bufAddr, dataOffset) {
     runtime.prepPacket(pkt, (4 | (1 << 24)) >>> 0, 0x0C, []);
@@ -44,7 +52,7 @@ function buildWritePkt(pkt, srcAddr, pointerOffset) {
     runtime.write64(pkt + 0x38n, 8n);
 }
 
-export async function spinReadProbe(context) {
+export async function spinReadProbe(context, title) {
     const owned = context.inspectionDomain;
     const target = context.loaderRoot;
     const ep = context.ep;
@@ -116,6 +124,16 @@ export async function spinReadProbe(context) {
         await khLog("SR1 copy transport=" + hex(reply.transport) +
             " moves=" + (reply.moves ? reply.moves.length : 0) +
             " handle=" + hex(copyHandle));
+        // First send on the fresh copy, INSIDE the spin window: if the
+        // object ref drops at this moment rather than before it, the close
+        // is triggered by the first dispatch, not at session creation.
+        if (copyHandle) {
+            const info = arenaAlloc(context, 0x2000, "sr-info");
+            buildCmifProbe(context, slots.pkt2, info, title);
+            const firstRc = bareSendTransport(copyHandle, slots.pkt2);
+            await khLog("SR1b FIRST-SEND rc=" + hex(firstRc) +
+                " handle=" + hex(copyHandle));
+        }
     } finally {
         const waitRc = runtime.waitRawThread(worker.handle, 8000000000n);
         await khLog("SR2 wait=" + hex(waitRc));
