@@ -152,6 +152,8 @@ export async function spinReadProbe(context, title) {
             const firstRc = bareSendTransport(copyHandle, slots.pkt2);
             await khLog("SR1b FIRST-SEND rc=" + hex(firstRc) +
                 " handle=" + hex(copyHandle));
+            const secondRc = bareSendTransport(copyHandle, slots.pkt2);
+            await khLog("SR1c SECOND-SEND rc=" + hex(secondRc));
         }
     } finally {
         const waitRc = runtime.waitRawThread(worker.handle, 8000000000n);
@@ -159,6 +161,25 @@ export async function spinReadProbe(context, title) {
         ep.pointer = null;
         await writeFs(context, entry20, oldPair);
     }
+
+    // Post-send timeline: the first dispatch returned 0xF601 but the object
+    // ref was still 2 at the last spinner sample. If the server-side close
+    // is asynchronous, the release lands somewhere in this trail — a JS
+    // read every ~8-11ms traces the drop (run46: SD2 read ref=2, then TS's
+    // 0xF601 send, then SR0 read ref=1 ~380ms later — the drop happened in
+    // that gap; this trail pins it for copy #2).
+    let refNow = await readFs(context, refField, 8).then(b => readU32LE(b, 0));
+    const refTrail = ["0:" + hex(refNow)];
+    for (let i = 1; i <= 40; i++) {
+        await runtime.waitMs(8);
+        const v = await readFs(context, refField, 8).then(b => readU32LE(b, 0));
+        if (v !== refNow) {
+            refTrail.push("+" + i + ":" + hex(refNow) + ">" + hex(v));
+            refNow = v;
+        }
+    }
+    refTrail.push("end:" + hex(refNow));
+    await khLog("SR4 post-send ref trail [" + refTrail.join(" ") + "]");
 
     // Decode the timeline: per-field value transitions with sample indices.
     const names = {ref: "ref(entry+0x38)", entry20: "entry20(+0x20)"};
