@@ -407,13 +407,15 @@ export async function run() {
                 }
             }
             await khLog("code fs opened (signed=" + codefs.codeInfo.isSigned + ")");
-            const npdm = captureCodeFile(context, codefs.handle, "main.npdm");
+            check(codefs.added, "donor requires a domain-added CodeFS object");
+            const npdm = await captureCodeFile(context, codefs.added,
+                "main.npdm");
             await khLog("captured main.npdm (" + npdm.size + " bytes, sha " +
                 npdm.sha256.slice(0, 12) + ")");
             const sd = openSdCard(context);
             const roMain = sdReadFile(context, sd,
                 globalThis.__KH_MANIFEST.ro.path, 0x100000);
-            await codeDomain(context, codefs.handle);
+            await codeDomain(context, codefs.handle, codefs.added);
             await prepareDonor(context,
                 {"main": roMain.bytes, "main.npdm": npdm.bytes});
             await donorDomainRow(context);

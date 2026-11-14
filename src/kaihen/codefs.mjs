@@ -6,6 +6,7 @@ import runtime from "../core/runtime.mjs";
 import {check, khLog, hex, u64Bytes, readU64LE, readU32LE, readNative,
     track, arenaSlots, bytesToHex, RO_TITLE} from "./state.mjs";
 import {cmifSend, requireOk, oneMovedHandle} from "./wire.mjs";
+import {sendContext, contextLog} from "./wire-context.mjs";
 import {readFs, fsPointer} from "./endpoint.mjs";
 import {sha256} from "./sha256.mjs";
 
@@ -130,55 +131,67 @@ export function openCodeFileSystem(context, sourceRootHandle, title) {
 }
 
 // Capture one file from the CodeFS by name (fully, bounded).
-export function captureCodeFile(context, codeHandle, name, limit) {
+// Capture one file from the CodeFS by routing through the inspection
+// domain with WithContext requests (object ids only — the reply handles
+// are server-table values, kernel-invalid for us). Mirrors the author's
+// recorded sequence: OpenFile (cmd 8, path X-buffer 0x301) -> file object
+// -> GetSize (cmd 4) -> Read (cmd 0, B buffer).
+export async function captureCodeFile(context, codeObject, name, limit) {
     const slots = arenaSlots(context);
+    const {writeStr} = runtime;
     writeStr(slots.path, "/" + name);
-    const opened = cmifSend(codeHandle, {
-        pkt: slots.pkt, cmd: 8,
-        x: [{addr: slots.path, size: 0x301}],
-        input: [1, 0, 0, 0]
-    });
-    requireOk(opened, "code open /" + name);
-    const child = oneMovedHandle(opened, "code file /" + name);
-    try {
-        const sizeReply = cmifSend(child, {pkt: slots.pkt2, cmd: 4,
-            input: [], rawWords: 8});
-        requireOk(sizeReply, "code size /" + name);
-        const size = readU64LE(
-            readNative(slots.pkt2 + BigInt(sizeReply.dataAt), 8), 0);
-        const length = limit ? Number(size > BigInt(limit) ? BigInt(limit) : size)
-            : Number(size);
-        check(length > 0 && length <= 0x100000, "unexpected /" + name + " size " + size);
-        const parts = [];
-        for (let at = 0; at < length; at += 0x10000) {
-            const sizeChunk = Math.min(0x10000, length - at);
-            const reply = cmifSend(child, {
-                pkt: slots.pkt, cmd: 0,
-                input: u64Bytes(0n).concat(u64Bytes(BigInt(at)))
-                    .concat(u64Bytes(BigInt(sizeChunk))),
-                b: [{addr: slots.data, size: sizeChunk}]
-            });
-            requireOk(reply, "code read /" + name);
-            parts.push(readNative(slots.data, sizeChunk));
+    const opened = sendContext(context, codeObject, {pkt: slots.pkt,
+        cmd: 8, x: [{addr: slots.path, size: 0x301}], input: [1, 0, 0, 0]});
+    await contextLog("CC open /" + name, opened);
+    check(opened.transport === 0 && opened.result === 0,
+        "code open /" + name + ": transport " + hex(opened.transport) +
+        " result " + hex(opened.result === -1 ? 0xffffffff : opened.result));
+    const fileObject = opened.added;
+    check(fileObject > 0, "code open /" + name + " added no object");
+    const sizeReply = sendContext(context, fileObject,
+        {pkt: slots.pkt2, cmd: 4, input: []});
+    check(sizeReply.transport === 0 && sizeReply.result === 0,
+        "code size /" + name + ": result " + hex(sizeReply.result));
+    // GetSize reply payload: u64 size after SFCO (scan for it).
+    let size = 0n;
+    for (let i = 0; i < 15; i++) {
+        if (sizeReply.words[i] === 0x4F434653) {
+            size = BigInt(sizeReply.words[i + 2]) |
+                (BigInt(sizeReply.words[i + 3]) << 32n);
+            break;
         }
-        let all = [];
-        for (const part of parts) all = all.concat(part);
-        return {name, bytes: all, size: Number(size), captured: length,
-            sha256: sha256(all)};
-    } finally {
-        closeHandle(child);
     }
+    const length = limit ? Number(size > BigInt(limit) ? BigInt(limit) : size)
+        : Number(size);
+    check(length > 0 && length <= 0x100000,
+        "unexpected /" + name + " size " + size);
+    const parts = [];
+    for (let at = 0; at < length; at += 0x10000) {
+        const sizeChunk = Math.min(0x10000, length - at);
+        const reply = sendContext(context, fileObject, {pkt: slots.pkt,
+            cmd: 0,
+            input: u64Bytes(0n).concat(u64Bytes(BigInt(at)))
+                .concat(u64Bytes(BigInt(sizeChunk))),
+            b: [{addr: slots.data, size: sizeChunk}]});
+        check(reply.transport === 0 && reply.result === 0,
+            "code read /" + name + " @" + at + ": result " + hex(reply.result));
+        parts.push(readNative(slots.data, sizeChunk));
+    }
+    let all = [];
+    for (const part of parts) all = all.concat(part);
+    return {name, bytes: all, size: Number(size), captured: length,
+        sha256: sha256(all)};
 }
 
 // Convert the CodeFS session to a domain; returns {root, entry, object, ...}
 // resolved against the FS domain table (used by the adapter-type compare).
-export async function codeDomain(context, codeHandle) {
-    const slots = arenaSlots(context);
-    const converted = cmifSend(codeHandle, {pkt: slots.pkt, control: true,
-        cmd: 0, input: [], rawWords: 8});
-    requireOk(converted, "CodeFS ConvertToDomain");
-    const root = Number(runtime.read32(slots.pkt + BigInt(converted.dataAt))) >>> 0;
-    check(root > 0 && root <= 0x4000, "CodeFS domain id out of range: " + root);
+export async function codeDomain(context, codeHandle, addedObject) {
+    // With the WithContext routing the CodeFS is ALREADY a member of the
+    // inspection domain (the code-open reply added it), so no
+    // ConvertToDomain is needed: the entry follows from the table layout.
+    check(addedObject > 0 && addedObject <= 0x4000,
+        "CodeFS object id out of range: " + hex(addedObject));
+    const root = addedObject;
     const entry = context.layout.table + (root - 1) * 0x30;
     const entryBytes = await readFs(context, entry, 0x30);
     const object = Number(readU64LE(entryBytes, 0x20));
