@@ -72,25 +72,27 @@ export async function instantSendProbe(context, title) {
         await khLog("IS1 domain code-open(t6) rc=" + hex(t) +
             " reply=[" + words.join(" ") + "]");
         if (t === 0) {
-            // Type-6 reply: SFCO, result, payload {.., handle, ..}; scan
-            // the first words for the result and a handle-shaped value.
-            let result = -1, handle = 0;
-            for (let i = 0n; i < 16n; i++) {
-                const w = Number(runtime.read32(pkt + i * 4n));
-                if (w === 0x4f464353 && i + 1n < 16n)
-                    result = Number(runtime.read32(pkt + (i + 1n) * 4n));
+            // Type-6 reply: SFCO (0x4F434653 LE), result, payload {..,
+            // handle, added-object-id, ..}.
+            let result = -1, handle = 0, added = 0;
+            for (let i = 0n; i < 15n; i++) {
+                if (Number(runtime.read32(pkt + i * 4n)) === 0x4F434653) {
+                    result = Number(runtime.read32(pkt + (i + 1n) * 4n)) >>> 0;
+                    const h = Number(runtime.read32(pkt + (i + 3n) * 4n)) >>> 0;
+                    if (h > 0x10000000 && h < 0xffff8000) handle = h;
+                    const a = Number(runtime.read32(pkt + (i + 4n) * 4n)) >>> 0;
+                    if (a > 0 && a <= 0x4000) added = a;
+                    break;
+                }
             }
-            for (let i = 2n; i < 15n; i++) {
-                const w = runtime.read32(pkt + i * 4n);
-                if (w > 0x10000000n && w < 0xffff8000n) handle = Number(w);
-            }
-            await khLog("IS2 result=" + hex(result >>> 0) +
-                " handle?=" + hex(handle));
-            if ((result >>> 0) === 0 && handle)
+            await khLog("IS2 result=" + hex(result) +
+                " handle=" + hex(handle) + " added-object=" + hex(added));
+            if (result === 0 && handle) {
                 context.instantCodeFs = track(context, handle, "is-codefs");
-            if (context.instantCodeFs)
-                await khLog("IS3 ***CODE FS OPEN*** handle=" +
-                    hex(context.instantCodeFs));
+                context.instantCodeFsInfo = info;
+                context.instantCodeFsAdded = added;
+                await khLog("IS3 ***CODE FS OPEN*** handle=" + hex(handle));
+            }
         }
     } finally {
         await writeFs(context, entry20, oldPair);      // un-borrow

@@ -74,6 +74,19 @@ export async function openCodeFileSystemViaDomain(context, domainHandle,
     return entry;
 }
 
+// Adopt a CodeFS already opened by the instant-send probe (the domain-
+// routed WithContext path): build the standard entry from the moved handle
+// and the request's code-info receive buffer.
+export function adoptCodeFileSystem(context, handle, infoAddr, added) {
+    track(context, handle, "codefs");
+    const info = readNative(BigInt(infoAddr), 0x1a4);
+    const entry = {handle, title: "instant", added,
+        codeInfo: {isSigned: info[0x1a0],
+            targetHash: bytesToHex(info.slice(0x1a4 - 0x24, 0x1a0))}};
+    context.codefs = entry;
+    return entry;
+}
+
 // OpenCodeFileSystem (cmd 0) on the copied Loader root with a B-descriptor
 // code-info output. Returns the CodeFS handle (kept in the game).
 export function openCodeFileSystem(context, sourceRootHandle, title) {

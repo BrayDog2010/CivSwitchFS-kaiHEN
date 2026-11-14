@@ -23,7 +23,8 @@ import {verifyEventCode, prepareApiWorkers, prepareGatedWorker,
     releaseGatedWorker, joinGatedWorker, workerFinished, workerSendResults}
     from "./kaihen/workers.mjs";
 import {prepareDonor, cleanupDonor} from "./kaihen/donor.mjs";
-import {openCodeFileSystem, openCodeFileSystemViaDomain, captureCodeFile,
+import {openCodeFileSystem, openCodeFileSystemViaDomain, adoptCodeFileSystem,
+    captureCodeFile,
     codeDomain, donorDomainRow,
     verifyAdapterTypes, bindSessions} from "./kaihen/codefs.mjs";
 import {Gate, prepareGateEvent} from "./kaihen/gate.mjs";
@@ -379,25 +380,31 @@ export async function run() {
         // Donor: the RO image from the SD card, the policy from the real
         // RO title's CodeFS through the copied Loader root.
         await stage("donor", async () => {
-            // Straight-shot ordering (reference parity with the author
-            // engine): the copied Loader root's FIRST send is the code-open —
-            // no SD mount, no DX borrow cycles before it. Their copy-loader-
-            // root -> code-open sequence is exactly this clean.
             let codefs;
-            try {
-                codefs = openCodeFileSystem(context, context.loaderCopy.handle,
-                    RO_TITLE);
-                await khLog("code fs opened via copied root");
-            } catch (error) {
-                await khLog("copied-root code open failed: " +
-                    (error && error.message ? error.message : error) +
-                    "; trying domain route");
-                const loaderObjectId = Math.floor(
-                    (context.loaderRoot.entry - context.layout.table) / 0x30) + 1;
-                check(loaderObjectId > 0 && loaderObjectId <= 0x4000,
-                    "loader object id out of table range");
-                codefs = await openCodeFileSystemViaDomain(context,
-                    context.inspectionDomain.handle, loaderObjectId, RO_TITLE);
+            if (context.instantCodeFs) {
+                // The instant-send probe already opened the CodeFS through
+                // the domain-routed WithContext path (run69: transport 0,
+                // result 0, handle moved) — adopt it directly.
+                codefs = adoptCodeFileSystem(context, context.instantCodeFs,
+                    context.instantCodeFsInfo, context.instantCodeFsAdded);
+                await khLog("code fs adopted from IS (added=" +
+                    hex(context.instantCodeFsAdded) + ")");
+            } else {
+                try {
+                    codefs = openCodeFileSystem(context, context.loaderCopy.handle,
+                        RO_TITLE);
+                    await khLog("code fs opened via copied root");
+                } catch (error) {
+                    await khLog("copied-root code open failed: " +
+                        (error && error.message ? error.message : error) +
+                        "; trying domain route");
+                    const loaderObjectId = Math.floor(
+                        (context.loaderRoot.entry - context.layout.table) / 0x30) + 1;
+                    check(loaderObjectId > 0 && loaderObjectId <= 0x4000,
+                        "loader object id out of table range");
+                    codefs = await openCodeFileSystemViaDomain(context,
+                        context.inspectionDomain.handle, loaderObjectId, RO_TITLE);
+                }
             }
             await khLog("code fs opened (signed=" + codefs.codeInfo.isSigned + ")");
             const npdm = captureCodeFile(context, codefs.handle, "main.npdm");
