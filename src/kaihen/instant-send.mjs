@@ -54,15 +54,24 @@ export async function instantSendProbe(context, title) {
         await khLog("IS1 copy-own rc=" + hex(copyRc) +
             " handle=" + hex(copyHandle));
         if (copyHandle) {
-            // Code-open directly — if our domain root's initialization is
-            // inherited like the reference's, this is the whole story.
+            // Our inspection domain was never pid-initialized (the
+            // reference's openDomain sends cmd1+{pid:true} BEFORE
+            // ConvertToDomain) — so the copy inherits no binding. Init the
+            // copy for real: cmd 1, u64(0), pid descriptor. On our OWN
+            // root this binds the session to us (run61's kill was the
+            // Loader-object binding mismatch).
+            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0n), pid: true});
+            const init = bareSendTransport(copyHandle, slots.pkt2);
+            let initR = "-";
+            if (init === 0) initR = hex(cmifReply(slots.pkt2).result);
             buildCmif(slots.pkt, {cmd: 0,
                 input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
                 b: [{addr: info, size: 0x1a4}]});
             const t2 = bareSendTransport(copyHandle, slots.pkt);
             let parsed = null;
             if (t2 === 0) parsed = cmifReply(slots.pkt);
-            await khLog("IS2 code-open=" + hex(t2) +
+            await khLog("IS2 init=" + hex(init) + "/" + initR +
+                " code-open=" + hex(t2) +
                 (parsed ? " result=" + hex(parsed.result) +
                     " moves=" + (parsed.moves ? parsed.moves.length : 0) : ""));
             if (parsed && parsed.result === 0 && parsed.moves &&
