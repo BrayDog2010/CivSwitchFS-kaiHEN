@@ -64,20 +64,41 @@ export async function instantSendProbe(context, title) {
             const init = bareSendTransport(copyHandle, slots.pkt2);
             let initR = "-";
             if (init === 0) initR = hex(cmifReply(slots.pkt2).result);
-            buildCmif(slots.pkt, {cmd: 0,
-                input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-                b: [{addr: info, size: 0x1a4}]});
-            const t2 = bareSendTransport(copyHandle, slots.pkt);
+            // The reference's working code-open (5T5Brx launch record,
+            // steps[].request) is a TYPE 6 RequestWithContext: w0=6|counts,
+            // B-descriptor, 4-word context {token 0x00X00001, pid, 0, 0},
+            // then SFCI + version(1) + cmd + input. Type 4 code-opens kill
+            // the session; the SDK speaks WithContext natively.
+            const pkt = slots.pkt;
+            for (let i = 0n; i < 0x100n; i += 8n)
+                runtime.write64(pkt + i, 0n);
+            runtime.write32(pkt, BigInt((0x6 | (1 << 24)) >>> 0));   // type 6, 1 B
+            runtime.write32(pkt + 4n, 0x10n);                          // 16 words
+            const infoAddr = BigInt(info);
+            runtime.write32(pkt + 8n, 0x1a4n);                         // B size
+            runtime.write32(pkt + 12n,
+                BigInt(Number(infoAddr & 0xffffffffn)));
+            const bflags = (((infoAddr >> 32n) & 0xfn) << 28n) |
+                (((infoAddr >> 36n) & 7n) << 2n);                      // mode 0
+            runtime.write32(pkt + 16n, BigInt(Number(bflags)));
+            runtime.write32(pkt + 0x20n, 0x00200001n);                 // context token
+            runtime.write32(pkt + 0x24n, 9n);                          // pid 9
+            runtime.write32(pkt + 0x28n, 0n);
+            runtime.write32(pkt + 0x2cn, 0n);
+            runtime.write32(pkt + 0x30n, 0x49434653n);                 // SFCI
+            runtime.write32(pkt + 0x34n, 1n);                          // version
+            runtime.write32(pkt + 0x38n, 0n);                          // cmd 0
+            runtime.write32(pkt + 0x3cn, 0n);
+            runtime.write32(pkt + 0x40n, 0x0301n);                     // attrs 1, storage 3
+            runtime.write32(pkt + 0x44n, 0n);
+            runtime.write64(pkt + 0x48n, BigInt(title));
+            const t2 = bareSendTransport(copyHandle, pkt);
             let d2 = "-", parsed = null;
             if (t2 !== 0) {
-                buildCmif(slots.pkt, {cmd: 0,
-                    input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-                    b: [{addr: info, size: 0x1a4}]});
-                d2 = hex(Number(sendIPC(copyHandle, slots.pkt)) >>> 0);
-                if (d2 === hex(0)) parsed = cmifReply(slots.pkt);
-            } else parsed = cmifReply(slots.pkt);
+                d2 = hex(Number(sendIPC(copyHandle, pkt)) >>> 0);
+            } else parsed = cmifReply(pkt);
             await khLog("IS2 init=" + hex(init) + "/" + initR +
-                " code-open bare=" + hex(t2) + " disp=" + d2 +
+                " code-open(t6)=" + hex(t2) + " disp=" + d2 +
                 (parsed ? " result=" + hex(parsed.result) +
                     " moves=" + (parsed.moves ? parsed.moves.length : 0) : ""));
             if (parsed && parsed.result === 0 && parsed.moves &&
