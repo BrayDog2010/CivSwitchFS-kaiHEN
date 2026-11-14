@@ -218,6 +218,10 @@ export async function run() {
             // State-diff dump in the author engine's proof schema, before any
             // send on the copied handle (reference runs/switch2-5T5Brx).
             await dumpChainState(context);
+            if (Array.isArray(globalThis.__KH_SKIP) &&
+                    globalThis.__KH_SKIP.includes("dx")) {
+                await khLog("DX experiments skipped (--skip dx)");
+            } else {
             // DX17: DX16 located the copied session's server-side
             // registration (a row containing {loaderObject, ?, 0x7d,
             // holderVptr}, with a session block ~0x60 before it carrying the
@@ -341,6 +345,7 @@ export async function run() {
             } finally {
                 await writeFs(context, entry19 + 0x20, oldPair19);
             }
+            }  // end DX experiments (skip boundary)
         });
         await stage("api-workers", () => prepareApiWorkers(context));
         await stage("sd-materialize", () => materializeSinkFiles(context));
@@ -364,9 +369,10 @@ export async function run() {
         // Donor: the RO image from the SD card, the policy from the real
         // RO title's CodeFS through the copied Loader root.
         await stage("donor", async () => {
-            const sd = openSdCard(context);
-            // Prefer the (possibly DX6-cloned) plain root; the domain-routed
-            // DX5 fallback kills its session on rejection, so it goes last.
+            // Straight-shot ordering (reference parity with the author
+            // engine): the copied Loader root's FIRST send is the code-open —
+            // no SD mount, no DX borrow cycles before it. Their copy-loader-
+            // root -> code-open sequence is exactly this clean.
             let codefs;
             try {
                 codefs = openCodeFileSystem(context, context.loaderCopy.handle,
@@ -387,6 +393,7 @@ export async function run() {
             const npdm = captureCodeFile(context, codefs.handle, "main.npdm");
             await khLog("captured main.npdm (" + npdm.size + " bytes, sha " +
                 npdm.sha256.slice(0, 12) + ")");
+            const sd = openSdCard(context);
             const roMain = sdReadFile(context, sd,
                 globalThis.__KH_MANIFEST.ro.path, 0x100000);
             await codeDomain(context, codefs.handle);
