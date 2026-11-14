@@ -53,30 +53,24 @@ export async function instantSendProbe(context, title) {
         await khLog("IS1 copy rc=" + hex(copyRc) +
             " handle=" + hex(copyHandle));
         if (copyHandle) {
-            // Code-open FIRST — the alive window is ~5-15ms after the copy
-            // (run54/55: trivial battery at +8ms survived, code-open at
-            // +15ms was already SessionClosed). Bare transport, page-
-            // aligned B buffer.
+            // The session dies exactly when OpenCodeFileSystem is sent on
+            // it (runs 48-57 cross-reference: benign traffic transports 0
+            // for seconds, code-open kills). The proxy may simply be
+            // uninitialized: the game's own fs session got SetCurrentProcess
+            // (cmd 2) at SDK init — a fresh copy has not. Init, then open.
+            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
+            const t1 = bareSendTransport(copyHandle, slots.pkt2);
+            buildCmif(slots.pkt2, {cmd: 2, input: u64Bytes(1n)});
+            const sp = bareSendTransport(copyHandle, slots.pkt2);
+            let spR = "-";
+            if (sp === 0) spR = hex(cmifReply(slots.pkt2).result);
             buildCmif(slots.pkt, {cmd: 0,
                 input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
                 b: [{addr: info, size: 0x1a4}]});
             const t2 = bareSendTransport(copyHandle, slots.pkt);
-            // Trivial command (1 = IsArchivedProgram: u64 in, u8 out, no
-            // descriptors) through both transports — only if the code-open
-            // did not already consume the session.
-            let t1 = "-", d1 = "-", r1 = "-";
-            if (t2 !== 0) {
-                buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
-                t1 = hex(bareSendTransport(copyHandle, slots.pkt2));
-                buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
-                const d1v = Number(sendIPC(copyHandle, slots.pkt2)) >>> 0;
-                d1 = hex(d1v);
-                if (d1v === 0) r1 = hex(cmifReply(slots.pkt2).result);
-            }
-            const d2 = t2 === 0 ? "-" : "skipped";
-            await khLog("IS2 code-open bare=" + hex(t2) +
-                " | post: trivial bare=" + t1 + " disp=" + d1 +
-                " result=" + r1 + " | code-open disp=" + d2);
+            await khLog("IS2 trivial=" + hex(t1) +
+                " SetCurrentProcess(1)=" + hex(sp) + "/" + spR +
+                " code-open=" + hex(t2));
             if (t2 === 0) {
                 const parsed = cmifReply(slots.pkt);
                 await khLog("IS3 result=" + hex(parsed.result) +
