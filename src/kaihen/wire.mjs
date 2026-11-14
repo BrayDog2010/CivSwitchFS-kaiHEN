@@ -57,7 +57,7 @@ export function buildCmif(pkt, options) {
         // attr 0, receive buffers attr 1 (NonSecureIpc). Empirical matrix
         // (runs 74-79): WithContext reads attr 0 -> server kill, attr 3 ->
         // server kill, attr 1 -> works (byte-for-byte the recording's read
-        buffer encoding); plain-protocol reads attr 3 -> server kill (run79
+        // buffer encoding); plain-protocol reads attr 3 -> server kill (run79
         ro/main). The old note about a mode-1 B descriptor rejected with
         0xE801 by the bare svc-0x22 wrapper (run51) was that run's copy
         combination, not the attribute — the SDK itself sends attr 1.
