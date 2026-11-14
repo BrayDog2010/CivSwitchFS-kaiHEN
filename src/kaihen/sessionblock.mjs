@@ -18,7 +18,7 @@ import {cmifSend, bareSendTransport, buildCmif} from "./wire.mjs";
 
 const WIN_BACK = 0x800, WIN_LEN = 0x4800;   // manager pool window
 const FIELD_BACK = 0x80, FIELD_FWD = 0x40;  // watch around a hit
-const TRAIL_ROUNDS = 60, TRAIL_GAP_MS = 8;
+const TRAIL_ROUNDS = 30, TRAIL_GAP_MS = 8;
 
 export async function sessionBlockProbe(context, title) {
     const owned = context.inspectionDomain;
@@ -34,12 +34,21 @@ export async function sessionBlockProbe(context, title) {
     const holderVptr = BigInt(layout.holderVptr);
     const refField = target.object + 0x38;
 
+    // Our inspection domain's own row signature — a session that stays
+    // alive through the whole chain. Watching it beside the fresh copy
+    // separates death-specific relinks from manager-wide rotations.
+    const ownObject = BigInt(context.loaderCopy.ownObject);
+    const ownEntry = context.loaderCopy.ownEntry;
+    const ownPair = await readFs(context, ownEntry + 0x20, 0x10);
+    const ownMeta = readU64LE(ownPair, 8);
+    const ownRefField = context.loaderCopy.ownObject + 0x38;
+
     const winStart = layout.manager - WIN_BACK;
-    const scan = async (label) => {
+    const scan = async (label, obj, meta) => {
         const bytes = await readFs(context, winStart, WIN_LEN);
         const hits = [];
         for (let k = FIELD_BACK; k + 0x20 <= WIN_LEN; k += 8) {
-            if (readU64LE(bytes, k) !== object) continue;
+            if (readU64LE(bytes, k) !== obj) continue;
             hits.push({at: k,
                 meta: readU64LE(bytes, k + 8),
                 id: readU64LE(bytes, k + 0x10),
@@ -52,7 +61,8 @@ export async function sessionBlockProbe(context, title) {
         return hits;
     };
 
-    const pre = await scan("0-pre");
+    const pre = await scan("0-pre", object, metadata);
+    const preOwn = await scan("0-pre-own", ownObject, ownMeta);
     const entry20 = context.loaderCopy.ownEntry + 0x20;
     const oldPair = await readFs(context, entry20, 0x10);
     const borrowPair = await readFs(context, target.entry + 0x20, 0x10);
@@ -74,22 +84,29 @@ export async function sessionBlockProbe(context, title) {
     }
     check(copyHandle, "SB copy failed — no handle to watch");
 
-    const post = await scan("2-post");
+    const post = await scan("2-post", object, metadata);
     const preSet = new Set(pre.map(h => h.at));
     const fresh = post.filter(h => !preSet.has(h.at) && h.holder === holderVptr);
     await khLog("SB2 new rows=" + fresh.length + " " +
         fresh.map(h => hex(winStart + h.at)).join(" "));
     check(fresh.length >= 1 && fresh.length <= 4,
         "expected 1-4 new registration rows, got " + fresh.length);
+    const domainRows = preOwn.filter(h => h.holder === holderVptr);
+    await khLog("SB2 domain rows=" + domainRows.length + " " +
+        domainRows.map(h => hex(winStart + h.at)).join(" "));
 
-    // Send-less field trail over each new row + the object ref.
-    const fieldsOf = (h) => [
-        {name: "ref", addr: refField},
+    // Send-less field trail: the new rows (N), the alive domain rows (D),
+    // and both object refs (RN/RD).
+    const fieldsOf = (h, tag) => [
+        {name: tag + ":ref", addr: tag === "N" ? refField : ownRefField},
         ...Array.from({length: (FIELD_BACK + FIELD_FWD) / 8}, (_, i) => ({
-            name: "q" + (i - FIELD_BACK / 8),       // q-16 .. q+7
+            name: tag + ":q" + (i - FIELD_BACK / 8),       // q-16 .. q+7
             addr: winStart + h.at - FIELD_BACK + i * 8}))
     ];
-    const watches = fresh.slice(0, 2).flatMap(fieldsOf);
+    const watches = [
+        ...fresh.slice(0, 1).flatMap(h => fieldsOf(h, "N")),
+        ...domainRows.slice(0, 1).flatMap(h => fieldsOf(h, "D"))];
+    check(watches.length <= 60, "too many watch fields: " + watches.length);
     const readAll = async () => {
         const out = [];
         for (const w of watches)
@@ -97,7 +114,8 @@ export async function sessionBlockProbe(context, title) {
         return out;
     };
     let last = await readAll();
-    const trail = ["t0:ref=" + hex(Number(last[0] & 0xffffffffffn))];
+    const trail = ["t0:N:ref=" + hex(Number(last[0] & 0xffffffffffn)) +
+        " D:ref=" + hex(Number(last[watches.findIndex(w => w.name === "D:ref")]] & 0xffffffffn))];
     let flips = 0;
     for (let t = 1; t <= TRAIL_ROUNDS && flips < 24; t++) {
         await runtime.waitMs(TRAIL_GAP_MS);
