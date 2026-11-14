@@ -53,45 +53,38 @@ export async function instantSendProbe(context, title) {
         await khLog("IS1 copy rc=" + hex(copyRc) +
             " handle=" + hex(copyHandle));
         if (copyHandle) {
-            // Trivial command (1 = IsArchivedProgram: u64 in, u8 out, no
-            // descriptors) through both transports, then the code-open
-            // through both. 0xE801 on the bare path with valid packets
-            // points at a session-type/transport mismatch; if the
-            // dispatcher transports 0, the port just needs the right send.
-            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
-            const t1 = bareSendTransport(copyHandle, slots.pkt2);
-            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
-            const d1 = Number(sendIPC(copyHandle, slots.pkt2)) >>> 0;
-            let r1 = "-";
-            if (d1 === 0) r1 = hex(cmifReply(slots.pkt2).result);
-            await khLog("IS2 trivial bare=" + hex(t1) +
-                " dispatcher=" + hex(d1) + " result=" + r1);
-            // The receive buffer MUST be page-aligned (the reference uses
-            // its 4096-aligned base+0x1000): an unaligned B descriptor
-            // transports through the TLS dispatcher but the kernel's
-            // WithUserBuffer path rejects it with 0xE801 InvalidCombination
-            // (run54 battery: no-descriptor trivial cmd transports 0 on
-            // both paths; only the unaligned-B code-open gets 0xE801).
+            // Code-open FIRST — the alive window is ~5-15ms after the copy
+            // (run54/55: trivial battery at +8ms survived, code-open at
+            // +15ms was already SessionClosed). Bare transport, page-
+            // aligned B buffer.
             buildCmif(slots.pkt, {cmd: 0,
                 input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
                 b: [{addr: info, size: 0x1a4}]});
             const t2 = bareSendTransport(copyHandle, slots.pkt);
-            buildCmif(slots.pkt, {cmd: 0,
-                input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
-                b: [{addr: info, size: 0x1a4}]});
-            const d2 = Number(sendIPC(copyHandle, slots.pkt)) >>> 0;
-            await khLog("IS3 code-open bare=" + hex(t2) +
-                " dispatcher=" + hex(d2));
-            for (const [tag, pktBuf, rc] of [["bare", slots.pkt, t2],
-                    ["disp", slots.pkt, d2]]) {
-                if (rc !== 0) continue;
-                const parsed = cmifReply(pktBuf);
-                await khLog("IS4 " + tag + " result=" + hex(parsed.result) +
+            // Trivial command (1 = IsArchivedProgram: u64 in, u8 out, no
+            // descriptors) through both transports — only if the code-open
+            // did not already consume the session.
+            let t1 = "-", d1 = "-", r1 = "-";
+            if (t2 !== 0) {
+                buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
+                t1 = hex(bareSendTransport(copyHandle, slots.pkt2));
+                buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
+                const d1v = Number(sendIPC(copyHandle, slots.pkt2)) >>> 0;
+                d1 = hex(d1v);
+                if (d1v === 0) r1 = hex(cmifReply(slots.pkt2).result);
+            }
+            const d2 = t2 === 0 ? "-" : "skipped";
+            await khLog("IS2 code-open bare=" + hex(t2) +
+                " | post: trivial bare=" + t1 + " disp=" + d1 +
+                " result=" + r1 + " | code-open disp=" + d2);
+            if (t2 === 0) {
+                const parsed = cmifReply(slots.pkt);
+                await khLog("IS3 result=" + hex(parsed.result) +
                     " moves=" + (parsed.moves ? parsed.moves.length : 0));
                 if (parsed.result === 0 && parsed.moves && parsed.moves.length) {
                     context.instantCodeFs = track(context, parsed.moves[0],
                         "is-codefs");
-                    await khLog("IS5 ***CODE FS OPEN*** handle=" +
+                    await khLog("IS4 ***CODE FS OPEN*** handle=" +
                         hex(context.instantCodeFs));
                 }
             }
