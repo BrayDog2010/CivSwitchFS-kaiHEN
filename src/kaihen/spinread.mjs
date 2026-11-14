@@ -71,17 +71,18 @@ export async function spinReadProbe(context, title) {
 
     // Slab allocations (the arena has an entry-count cap ~400; per-packet
     // arenaAlloc calls exhaust it around round 59 regardless of size).
-    const PKT_STRIDE = 0x100, BUF_STRIDE = 0x40;
-    const pktSlab = arenaAlloc(context, ROUNDS * 4 * PKT_STRIDE, "sr-pkts");
-    const bufSlab = arenaAlloc(context, ROUNDS * 2 * BUF_STRIDE, "sr-bufs");
+    // arenaAlloc returns BigInt addresses; keep all slab math BigInt.
+    const PKT_STRIDE = 0x100n, BUF_STRIDE = 0x40n;
+    const pktSlab = arenaAlloc(context, ROUNDS * 4 * 0x100, "sr-pkts");
+    const bufSlab = arenaAlloc(context, ROUNDS * 2 * 0x40, "sr-bufs");
 
     const packets = [];   // {pkt, readBuf?}
     for (let r = 0; r < ROUNDS; r++) {
-        const base = pktSlab + r * 4 * PKT_STRIDE;
-        const bufs = bufSlab + r * 2 * BUF_STRIDE;
+        const base = pktSlab + BigInt(r) * 4n * PKT_STRIDE;
+        const bufs = bufSlab + BigInt(r) * 2n * BUF_STRIDE;
         const wpktR = base, rpktR = base + PKT_STRIDE;
         const bufR = bufs;
-        const wpktE = base + 2 * PKT_STRIDE, rpktE = base + 3 * PKT_STRIDE;
+        const wpktE = base + 2n * PKT_STRIDE, rpktE = base + 3n * PKT_STRIDE;
         const bufE = bufs + BUF_STRIDE;
         buildWritePkt(wpktR, srcRef, ep.dataEntryOffset + 0x20);
         buildReadPkt(rpktR, bufR, ep.dataOffset);
