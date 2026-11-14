@@ -34,17 +34,13 @@ export async function sessionBlockProbe(context, title) {
     const holderVptr = BigInt(layout.holderVptr);
     const refField = target.object + 0x38;
 
-    // Our inspection domain's own row signature — a session that stays
-    // alive through the whole chain. Watching it beside the fresh copy
-    // separates death-specific relinks from manager-wide rotations.
-    const ownObject = BigInt(context.loaderCopy.ownObject);
-    const ownEntry = context.loaderCopy.ownEntry;
-    const ownPair = await readFs(context, ownEntry + 0x20, 0x10);
-    const ownMeta = readU64LE(ownPair, 8);
-    const ownRefField = context.loaderCopy.ownObject + 0x38;
+    // Alive-row anchor: the inspection domain's SESSION object (DL3's
+    // base.domain — vptr rootVptr+0x28e0), not our entry object. Its
+    // registration row is what stays alive through the whole chain.
+    const domainPtr = BigInt(context.state.domainLayout.domain);
 
     const winStart = layout.manager - WIN_BACK;
-    const scan = async (label, obj, meta) => {
+    const scan = async (label, obj) => {
         const bytes = await readFs(context, winStart, WIN_LEN);
         const hits = [];
         for (let k = FIELD_BACK; k + 0x20 <= WIN_LEN; k += 8) {
@@ -61,8 +57,8 @@ export async function sessionBlockProbe(context, title) {
         return hits;
     };
 
-    const pre = await scan("0-pre", object, metadata);
-    const preOwn = await scan("0-pre-own", ownObject, ownMeta);
+    const pre = await scan("0-pre", object);
+    const preDom = await scan("0-pre-dom", domainPtr);
     const entry20 = context.loaderCopy.ownEntry + 0x20;
     const oldPair = await readFs(context, entry20, 0x10);
     const borrowPair = await readFs(context, target.entry + 0x20, 0x10);
@@ -84,21 +80,21 @@ export async function sessionBlockProbe(context, title) {
     }
     check(copyHandle, "SB copy failed — no handle to watch");
 
-    const post = await scan("2-post", object, metadata);
+    const post = await scan("2-post", object);
     const preSet = new Set(pre.map(h => h.at));
     const fresh = post.filter(h => !preSet.has(h.at) && h.holder === holderVptr);
     await khLog("SB2 new rows=" + fresh.length + " " +
         fresh.map(h => hex(winStart + h.at)).join(" "));
     check(fresh.length >= 1 && fresh.length <= 4,
         "expected 1-4 new registration rows, got " + fresh.length);
-    const domainRows = preOwn.filter(h => h.holder === holderVptr);
+    const domainRows = preDom.filter(h => h.holder === holderVptr);
     await khLog("SB2 domain rows=" + domainRows.length + " " +
         domainRows.map(h => hex(winStart + h.at)).join(" "));
 
     // Send-less field trail: the new rows (N), the alive domain rows (D),
-    // and both object refs (RN/RD).
+    // and the copied object's ref (N:ref).
     const fieldsOf = (h, tag) => [
-        {name: tag + ":ref", addr: tag === "N" ? refField : ownRefField},
+        ...(tag === "N" ? [{name: "N:ref", addr: refField}] : []),
         ...Array.from({length: (FIELD_BACK + FIELD_FWD) / 8}, (_, i) => ({
             name: tag + ":q" + (i - FIELD_BACK / 8),       // q-16 .. q+7
             addr: winStart + h.at - FIELD_BACK + i * 8}))
@@ -114,9 +110,9 @@ export async function sessionBlockProbe(context, title) {
         return out;
     };
     let last = await readAll();
-    const dRefIdx = watches.findIndex(w => w.name === "D:ref");
     const trail = ["t0:N:ref=" + hex(Number(last[0] & 0xffffffffffn)) +
-        " D:ref=" + hex(Number(last[dRefIdx] & 0xffffffffn))];
+        (watches.some(w => w.name === "D:q-16") ?
+            " D-block@" + hex(watches.find(w => w.name === "D:q-16").addr) : "")];
     let flips = 0;
     for (let t = 1; t <= TRAIL_ROUNDS && flips < 24; t++) {
         await runtime.waitMs(TRAIL_GAP_MS);
