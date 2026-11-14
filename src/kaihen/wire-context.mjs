@@ -40,12 +40,13 @@ export function buildContextPacket(pkt, options) {
             BigInt(Number(address & 0xffffffffn)));
         at += 8;
     }
-    for (const d of bList) {                       // B: 3 words, mode 0
+    for (const d of bList) {                       // B: 3 words, mode 0/3
         const address = BigInt(d.addr);
         runtime.write32(pkt + BigInt(at), BigInt(Number(d.size)));
         runtime.write32(pkt + BigInt(at + 4),
             BigInt(Number(address & 0xffffffffn)));
-        const flags = (((address >> 32n) & 0xfn) << 28n) |
+        const mode = BigInt(d.mode || 0);          // 3 = server-writable
+        const flags = mode | (((address >> 32n) & 0xfn) << 28n) |
             (((address >> 36n) & 7n) << 2n);
         runtime.write32(pkt + BigInt(at + 8), BigInt(Number(flags)));
         at += 12;

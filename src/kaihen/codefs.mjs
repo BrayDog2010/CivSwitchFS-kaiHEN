@@ -176,7 +176,7 @@ export async function captureCodeFile(context, codeObject, name, limit) {
         const reply = sendContext(context, fileObject, {pkt: slots.pkt,
             cmd: 0,
             input: u64Bytes(BigInt(at)).concat(u64Bytes(BigInt(sizeChunk))),
-            b: [{addr: slots.data, size: sizeChunk}]});
+            b: [{addr: slots.data, size: sizeChunk, mode: 3}]});
         check(reply.transport === 0 && reply.result === 0,
             "code read /" + name + " @" + at + ": transport " +
             hex(reply.transport) + " result " + hex(reply.result) +
