@@ -152,19 +152,24 @@ export async function captureCodeFile(context, codeObject, name, limit) {
         {pkt: slots.pkt2, cmd: 4, input: []});
     check(sizeReply.transport === 0 && sizeReply.result === 0,
         "code size /" + name + ": result " + hex(sizeReply.result));
-    // GetSize reply payload: u64 size after SFCO (scan for it).
+    // Type-6 reply: SFCO, result, then payload — offsets vary; dump and
+    // read the first plausible u64 (npdm sizes are 0x1000..0x100000).
     let size = 0n;
     for (let i = 0; i < 15; i++) {
         if (sizeReply.words[i] === 0x4F434653) {
-            size = BigInt(sizeReply.words[i + 2]) |
-                (BigInt(sizeReply.words[i + 3]) << 32n);
+            const lo = sizeReply.words[i + 2] | (sizeReply.words[i + 3] << 32);
+            const lo2 = sizeReply.words[i + 4] | (sizeReply.words[i + 5] << 32);
+            if (lo > 0 && lo <= 0x100000) size = BigInt(lo);
+            else if (lo2 > 0 && lo2 <= 0x100000) size = BigInt(lo2);
+            else size = BigInt(lo);   // keep for the error message
             break;
         }
     }
     const length = limit ? Number(size > BigInt(limit) ? BigInt(limit) : size)
         : Number(size);
     check(length > 0 && length <= 0x100000,
-        "unexpected /" + name + " size " + size);
+        "unexpected /" + name + " size " + size + " words [" +
+        sizeReply.words.map(w => hex(w)).join(" ") + "]");
     const parts = [];
     for (let at = 0; at < length; at += 0x10000) {
         const sizeChunk = Math.min(0x10000, length - at);
