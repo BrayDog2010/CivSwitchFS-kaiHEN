@@ -53,23 +53,21 @@ export async function instantSendProbe(context, title) {
         await khLog("IS1 copy rc=" + hex(copyRc) +
             " handle=" + hex(copyHandle));
         if (copyHandle) {
-            // The session dies exactly when OpenCodeFileSystem is sent on
-            // it (runs 48-57 cross-reference: benign traffic transports 0
-            // for seconds, code-open kills). The proxy may simply be
-            // uninitialized: the game's own fs session got SetCurrentProcess
-            // (cmd 2) at SDK init — a fresh copy has not. Init, then open.
-            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0x10n)});
-            const t1 = bareSendTransport(copyHandle, slots.pkt2);
-            buildCmif(slots.pkt2, {cmd: 2, input: u64Bytes(1n)});
-            const sp = bareSendTransport(copyHandle, slots.pkt2);
-            let spR = "-";
-            if (sp === 0) spR = hex(cmifReply(slots.pkt2).result);
+            // The reference initializes every root before use: cmd 1 with
+            // u64(0) input AND the send-pid descriptor (fs-root-control.cjs
+            // 'Initialize dedicated PID-test root', {pid: true}). Our earlier
+            // descriptor-less cmd 1 returned an error result (0xA2B39A02) —
+            // malformed, not harmless. The pid descriptor is the init.
+            buildCmif(slots.pkt2, {cmd: 1, input: u64Bytes(0n), pid: true});
+            const init = bareSendTransport(copyHandle, slots.pkt2);
+            let initR = "-";
+            if (init === 0) initR = hex(cmifReply(slots.pkt2).result);
             buildCmif(slots.pkt, {cmd: 0,
                 input: [1, 3, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(title))),
                 b: [{addr: info, size: 0x1a4}]});
-            const t2 = bareSendTransport(copyHandle, slots.pkt);
-            await khLog("IS2 trivial=" + hex(t1) +
-                " SetCurrentProcess(1)=" + hex(sp) + "/" + spR +
+            const t2 = init === 0
+                ? bareSendTransport(copyHandle, slots.pkt) : 0xF601;
+            await khLog("IS2 init(cmd1,pid)=" + hex(init) + "/" + initR +
                 " code-open=" + hex(t2));
             if (t2 === 0) {
                 const parsed = cmifReply(slots.pkt);
