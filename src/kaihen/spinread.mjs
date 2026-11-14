@@ -24,7 +24,10 @@ function buildCmifProbe(context, pkt, info, title) {
         b: [{addr: info + 32n, size: 0x1a4}]});
 }
 
-const ROUNDS = 200;   // 200 rounds x (ref, entry) = 400 samples
+const ROUNDS = 60;   // 60 rounds x (ref, entry) = 120 samples. Frame size
+// grows ~0x240/call (tables 0x100 + stack 0x140 per call); 240 calls keep
+// the frame allocation under 180 KB — 800 calls asked malloc for 924 KB and
+// died (frame=0 memset, run44).
 
 function buildReadPkt(pkt, bufAddr, dataOffset) {
     runtime.prepPacket(pkt, (4 | (1 << 24)) >>> 0, 0x0C, []);
