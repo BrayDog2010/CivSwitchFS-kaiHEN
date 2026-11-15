@@ -1,7 +1,7 @@
 # CivSwitchFS-kaiHEN
 
 > [!IMPORTANT]
-> Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepsipu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart: This is a fork of CivSwitchFS which is by Nerisma, who did the difficult work of getting FS acquisition work locally!
+> Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepsipu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart: This is a fork of CivSwitchFS which is by **Nerisma**, who did the difficult work of getting FS acquisition work locally!
 
 CivSwitchFS provides **access to FS privileges** through an elevated fsp-srv handle. It runs inside the **CivSwitch Remote JS Loader**. The FS access can be chained into a full **kaiHEN boot** (homebrew enabler), which is what this fork provides, see [Booting kaiHEN](#usage).
 
