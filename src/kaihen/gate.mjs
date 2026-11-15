@@ -58,8 +58,14 @@ export class Gate {
 
     async parkSession() {
         const before = await this.inspect(false);
+        const beforeSel = await this.selections();
         check(before.state === 1 && this.waiters.includes(before.parent),
-            "session is not idle on a known waiter");
+            "session is not idle on a known waiter (state=" + before.state +
+            " parent=" + hex(before.parent) + " receiveResult=" +
+            before.receiveResult + " waiters=[" +
+            this.waiters.map(w => hex(w)).join(",") + "] selected=[" +
+            beforeSel.map(w => hex(w)).join(",") + "] row=" +
+            hex(this.row.address) + ")");
         await compareWriteFs(this.context, this.row.address + 0x30,
             u64Bytes(BigInt(this.row.wait)).slice(0, 4),
             u64Bytes(BigInt(this.park)).slice(0, 4));
