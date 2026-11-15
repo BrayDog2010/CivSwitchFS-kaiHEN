@@ -11,6 +11,14 @@ Smol demo of CivSwitchFS: https://streamable.com/bhgobg
 
 Smol demo of CivSwitchFS booting KaiHEN: https://youtu.be/2pGN9HiXaZg
 
+## Repo state
+
+This is meant to be sharing early code. It's not for end users. It's not cleaned properly. The branch is called slop for a reason.
+
+Either wait a bit of gamble with https://github.com/s8n/civ7-fs-kaihen
+
+Beware that fs vuln can be risky to utilize and may corrupt things like your save file, or more. If you want minimal brick risk, then wait on.
+
 ## Tested configuration
 
 - Nintendo Switch 2, firmware **23.0.1** (only exFAT fw tested, FAT32 should work too). Do not use on lower firmware!
