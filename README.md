@@ -1,11 +1,13 @@
 # CivSwitchFS
 
 > [!IMPORTANT]
-> Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepspiu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart:
+> Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepsipu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart:
 
-This is payload provides **access to FS privileges** through an elevated fsp-srv handle. It runs inside the **CivSwitch Remote JS Loader**. That elevated session is exposed as `globalThis.fspSrv` for the next payloads. **IT'S ALSO TARGETTING DEVS**, *I'm sorry but other people probably won't know what to do with this !*.
+This is payload provides **access to FS privileges** through an elevated fsp-srv handle. It runs inside the **CivSwitch Remote JS Loader**. That elevated session is exposed as `globalThis.fspSrv` for the next payloads. **IT'S ALSO TARGETTING DEVS**, *I'm sorry but other people probably won't know what to do with this !*. Also **it does not go to the RO stage**, yet.
 
 CivSwitchFS is **semi-untethered**, RPC was fully removed :tada:
+
+Smol demo https://streamable.com/bhgobg
 
 ## Tested configuration
 
@@ -37,10 +39,6 @@ npm run persist:install -- <console-ip> [--minify-payload]
 
 Future launches from that save start the exploit, loader, and
 payload automatically, without a computer or network connection. 
-
-The persisted payload removes whitespace and comments by default while keeping
-source names and syntax. Pass `--debug-payload` to preserve formatting, or
-`--minify-payload` to also shorten ESM local identifiers.
 
 The installer does not back up the old save. 
 
@@ -108,7 +106,3 @@ tools/               # well, tools
 ## License
 
 The original code in this repository is distributed under the MIT license. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for detailed notices and credits.
-
-For technical details, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
-
-This project is not affiliated with or endorsed by Nintendo. It contains no Nintendo firmware, keys, tickets, or personal saves; `persist/save_template.bin` is the pristine trigger template used by the installer.
