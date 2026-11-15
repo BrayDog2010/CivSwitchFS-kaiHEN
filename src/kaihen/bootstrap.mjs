@@ -9,7 +9,7 @@ import {check, khLog, hex, readU64LE, readU32LE, readNative,
 import {buildNroImage, tryWaitAdapterBytes, runNroOnRawThread} from "./ro.mjs";
 import {bareSendTransport} from "./wire.mjs";
 import {sendContext} from "./wire-context.mjs";
-import {readFs, writeFs} from "./endpoint.mjs";
+import {readFs, writeFs, armEndpoint} from "./endpoint.mjs";
 import {sdReadFile, openSdCard} from "./sdcard.mjs";
 
 // thread-code.json (game SDK).
@@ -63,6 +63,13 @@ export async function runBootstrap(context, options = {}) {
     // open (steps[1]/[8], object 9 = the loader entry) — we mirror that
     // first, then log both replies so a dead bootstrap names its step.
     {
+        // BS0 says the endpoint is armed at entry, yet the first PP readFs
+        // saw it disarmed (runs 119/121/124) — re-arm defensively and log.
+        await khLog("PP-prep ep=" + (!!(context.ep && context.ep.armed)) +
+            " sd=" + (globalThis.__KH && globalThis.__KH.sd ? "cached" : "null"));
+        if (!(context.ep && context.ep.armed))
+            await armEndpoint(context);
+
         // SetCurrentProcess must reach the LOADER's object. Routing to the
         // loader's own entry id through our domain kills it (foreign entry,
         // run117); the IS probe's valid route is our OWN entry id while the
