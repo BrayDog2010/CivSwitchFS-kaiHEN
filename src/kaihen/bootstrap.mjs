@@ -28,6 +28,8 @@ function hexToBytes(text) {
 }
 
 export async function runBootstrap(context, options = {}) {
+    context.__bsTag = Date.now();
+    const ep0 = context.ep;
     await khLog("BS0 ep=" + (!!(context.ep && context.ep.armed)) +
         " tracked=" + (context.handles ? context.handles.length : "?"));
     // Load bootstrap.bin from the staged SD file.
@@ -52,6 +54,22 @@ export async function runBootstrap(context, options = {}) {
     const args = buildBootstrapArgs(context, options);
     const argsAddress = arenaAlloc(context, ARG_BYTES + 0x40, "bootstrap-args");
     context.bootstrapArgsAddress = Number(argsAddress);
+
+    // Identity diagnostics: BS0 saw ep armed; the PP readFs saw context.ep
+    // undefined (runs 119-125) — log whether the context object or its ep
+    // changed identity across the SD read + image build.
+    try {
+        await khLog("PP-id tag=" + (context.__bsTag ? "same" : "CHANGED") +
+            " ep0=" + (context.ep === ep0) +
+            " ep=" + (!!(context.ep && context.ep.armed)) +
+            " sd=" + (globalThis.__KH && globalThis.__KH.sd ?
+                "cached" : "null") +
+            " keys=" + Object.keys(context).length);
+    } catch (logError) { /* survive log failure */ }
+    if (!(context.ep && context.ep.armed)) {
+        await khLog("PP re-arm required");
+        await armEndpoint(context);
+    }
 
     // Replicate the bootstrap's protocol negotiation on the copy session
     // (disassembled readSignedPolicy @ text+0x3848): (1) a type-5
