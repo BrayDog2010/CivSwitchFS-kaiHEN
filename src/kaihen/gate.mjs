@@ -46,7 +46,9 @@ export class Gate {
             "the bound server session changed");
         check(readU32LE(b, 0x30) === (parked ? this.park : this.row.wait),
             "the wait word changed");
-        return {parent: readU64LE(b, 0x28), state: readU32LE(b, 0x40),
+        // readU64LE yields BigInt; waiters are Numbers — coerce before the
+        // includes() comparison (bindSessions does the same).
+        return {parent: Number(readU64LE(b, 0x28)), state: readU32LE(b, 0x40),
             receiveResult: readU32LE(b, 0x44)};
     }
 
