@@ -472,7 +472,11 @@ export async function run() {
             }
             await closeHandle(copy.handle);
         });
-        await stage("launch", () => launchRoFrontend(context));
+        await stage("launch", async () => {
+            // Stash the rich launch proof on the ledger so a failed run's
+            // postmortem can read the full request-by-request record.
+            globalThis.__KH.launchProof = await launchRoFrontend(context);
+        });
         await stage("activate", async () => {
             await activateRoProcess(context, RO_TITLE);
             await verifyHandoff(context);

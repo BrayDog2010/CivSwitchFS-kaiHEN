@@ -11,6 +11,8 @@ import {buildNroImage, tryWaitAdapterBytes, runNroOnRawThread} from "./ro.mjs";
 import {bareSendTransport, cmifSend} from "./wire.mjs";
 import {sendContext} from "./wire-context.mjs";
 import {readFs, writeFs, armEndpoint} from "./endpoint.mjs";
+import {Gate} from "./gate.mjs";
+import {exportHandle} from "./objects.mjs";
 import {sdReadFile, openSdCard, sdGetEntryType, sdWriteFile}
     from "./sdcard.mjs";
 
@@ -155,6 +157,70 @@ export async function runBootstrap(context, options = {}) {
             }
             if (reply.transport === 0xF601) {
                 busy++;
+                if (busy === 1) {
+                    // Dump the loader's fs-side row once: wait word, state,
+                    // and the head of the row's request buffer identify the
+                    // hung dispatch (a real header there = fs received a
+                    // request it never processed).
+                    try {
+                        const row = context.bound.rows.find(
+                            r => r.domain === context.loaderRoot.domain);
+                        if (row) {
+                            const b = await readFs(context, row.address, 0x88);
+                            const req = await readFs(context, row.request, 0x40);
+                            await khLog("BS-row state=" + readU32LE(b, 0x40) +
+                                " parent=" + hex(readU64LE(b, 0x28)) +
+                                " wait=" + hex(readU32LE(b, 0x30)) +
+                                " recvRes=" + readU32LE(b, 0x44) +
+                                " hdr=" + hex(readU32LE(req, 0)) +
+                                " req=[" + [0, 4, 8, 12].map(o =>
+                                    hex(readU32LE(req, o))).join(" ") + "]");
+                        } else await khLog("BS-row not found in bound.rows");
+                    } catch (dumpError) {
+                        await khLog("BS-row dump failed: " +
+                            (dumpError && dumpError.message ?
+                                dumpError.message : dumpError));
+                    }
+                }
+                if (busy === 8) {
+                    // One unwedge attempt (~4s in): the gate machinery
+                    // rebuilds the row's wait selection (parkSession's empty
+                    // step) and can consume a queued request (step), letting
+                    // fs receive and reply to the hung dispatch after the
+                    // restore — the same dance gate-test and launch run.
+                    try {
+                        await khLog("BS-unwedge: parking the loader row");
+                        const row = context.bound.rows.find(
+                            r => r.domain === context.loaderRoot.domain);
+                        check(row, "the loader row is missing from bound.rows");
+                        const copy = await exportHandle(context, row.receive,
+                            "unwedge readiness");
+                        const gate = new Gate(context, row, copy.handle,
+                            context.gateEvent);
+                        try {
+                            await gate.parkSession();
+                            try {
+                                const step = await gate.step();
+                                await khLog("BS-unwedge stepped request [" +
+                                    [0, 4, 8, 12, 16].map(o =>
+                                        hex(readU32LE(step.request, o)))
+                                        .join(" ") + "]");
+                            } catch (stepError) {
+                                await khLog("BS-unwedge step: " +
+                                    (stepError && stepError.message ?
+                                        stepError.message : stepError));
+                            }
+                        } finally {
+                            await gate.restore();
+                        }
+                        runtime.closeHandle(copy.handle);
+                        await khLog("BS-unwedge done");
+                    } catch (unwedgeError) {
+                        await khLog("BS-unwedge failed: " +
+                            (unwedgeError && unwedgeError.message ?
+                                unwedgeError.message : unwedgeError));
+                    }
+                }
                 if (busy % 10 === 1)
                     await khLog("BS-cmd0 busy x" + busy + " +" +
                         Math.round((Date.now() - gateStart) / 1000) + "s — waiting");
