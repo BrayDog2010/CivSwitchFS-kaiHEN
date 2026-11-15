@@ -55,9 +55,22 @@ running — no computer attached. When the screen shows
 `HEN IS RUNNING`, close the game normally and hold R while opening
 another game.
 
-The SD card must already carry the kaiHEN files: run the kaiHEN launcher
-once while attached to a computer, or copy `/kaihen/bin`,
-`/hbmenu.nro` and `/switch/ounceshell.nro` to the card by hand.
+The SD card must already carry the kaiHEN files. Either run the kaiHEN
+launcher once while attached to a computer (it stages them through the
+exploit), or copy them by hand: power the console off, put the card in
+a computer, and place the release files like this:
+
+| kaiHEN release file | SD card path |
+|---|---|
+| `bootstrap.bin` | `/kaihen/bin/bootstrap.bin` |
+| `ro/main` | `/kaihen/bin/ro/main` |
+| `hen/main` | `/kaihen/bin/hen/main` |
+| `game/main` | `/kaihen/bin/game/main` |
+| `hbmenu.nro` | `/hbmenu.nro` |
+| `programs/ounceshell.nro` | `/switch/ounceshell.nro` |
+
+If a file is missing, the chain refuses right after the promotion with
+`SD files missing: …` instead of wasting the boot.
 
 The same failure modes as the wired flow apply. The promotion is a race:
 if it loses, close and reopen the game to retry. The layout stage can
