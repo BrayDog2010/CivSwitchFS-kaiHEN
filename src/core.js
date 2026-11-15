@@ -98,6 +98,8 @@ export async function run() {
         let positiveWindowsTotal = 0;
 
         for (let attempt = 1; attempt <= attemptLimit; attempt++) {
+            if (attempt === 1)
+                await emitStage("CivSwitchFS by Nerisma");
             await emitStage("======== ATTEMPT " + attempt + " ========");
             // The hard-cap attempt verifies the last schedule without retuning.
             const result = await runTrackedAttempt(canaryTimingSchedule,

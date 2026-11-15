@@ -50,8 +50,8 @@ Installs a persistent image that runs the promotion and the kaiHEN chain
 back to back. Every launch of the game from that save attempts the full
 sequence by itself and, when the promotion wins, ends with kaiHEN
 running, with no computer attached. When the screen shows
-`HEN IS RUNNING`, close the game normally and hold R while opening
-another game.
+`HEN IS RUNNING`, close the game normally and hold R while opening a
+Switch 2 game twice.
 
 The SD card must already carry the kaiHEN files. Either run the kaiHEN
 launcher once while attached to a computer (it stages them through the
@@ -145,12 +145,12 @@ A successful run ends with:
 
 ```
 KH: === HEN IS RUNNING ===
--- kaiHEN is running. Close Civilization VII normally; hold R while opening a Switch 2 game. --
+-- kaiHEN is running. Close Civilization VII normally; hold R while opening a Switch 2 game twice. --
 ```
 
 Then close Civ 7 normally (don't power off), hold R while opening another
-game. The first R-held launch only records the game's signing policy and
-the game starts as usual; the next R-held launch opens hbmenu. kaiHEN
+game twice. The first R-held launch only records the game's signing policy and
+the game starts as usual; the second R-held launch opens hbmenu. kaiHEN
 keeps running until the console restarts.
 
 The launcher stages the SD card, then runs the chain: it re-arms the

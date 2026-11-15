@@ -304,7 +304,7 @@ async function main() {
     }    const result = await send(options.console, port, built.payload, "run");
     if (/HEN IS RUNNING/.test(result)) {
         console.log("\n-- kaiHEN is running. Close Civilization VII normally; " +
-            "hold R while opening a Switch 2 game. --");
+            "hold R while opening a Switch 2 game twice. --");
     } else {
         console.error("\n-- kaiHEN did not start; see the log above --");
         process.exitCode = 1;

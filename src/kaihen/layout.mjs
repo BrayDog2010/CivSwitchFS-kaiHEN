@@ -66,7 +66,7 @@ export async function deriveLayout(context) {
         readU64LE(ring, 0) >= 2n ** 32n && readU64LE(ring, 0) < 2n ** 39n &&
         readU32LE(ring, 0x18) > 0 && readU32LE(ring, 0x18) <= 128,
         "FS SDK page does not contain the expected thread-ring header");
-    await khLog("DL5 layout verified");
+    await khLog("DL5 layout verified (next step might take a bit to show)");
 
     context.layout = layout;
     await khLog("layout sdk=" + hex(layout.sdk) + " table=" + hex(layout.table) +

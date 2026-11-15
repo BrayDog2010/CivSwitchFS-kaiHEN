@@ -125,7 +125,7 @@ async function sdFileStatus(context) {
 }
 
 export async function run() {
-    await khLog("=== kaiHEN start for CivSwitchFS ===");
+    await khLog("=== kaiHEN start for CivSwitchFS (ported by ave) ===");
     const mode = globalThis.__KH_MODE === "status" ? "status" : "run";
     globalThis.__KH_MODE = "run";
 
@@ -523,7 +523,7 @@ export async function run() {
 
         await khLog("=== HEN IS RUNNING ===");
         await khLog("Close Civilization VII normally; hold R while opening " +
-            "a Switch 2 game.");
+            "a Switch 2 game twice.");
         stageDone("complete", {ok: true});
     } catch (error) {
         await khLog("FAILED at stage '" +
