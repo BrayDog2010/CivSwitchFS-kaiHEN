@@ -14,10 +14,10 @@ export const RO_TITLE = 0x0400000000000037n;   // system RO title (launch + dono
 export const HEN_TITLE = 0x040000000000003an;  // HEN title (bootstrap's own launch)
 
 export const SD_MANIFEST = {
-    "bootstrap": {path: "/ouncehen/bin/bootstrap.bin", size: 28012},
-    "ro": {path: "/ouncehen/bin/ro/main", size: 23854},
-    "hen": {path: "/ouncehen/bin/hen/main", size: 78761},
-    "game": {path: "/ouncehen/bin/game/main", size: 62943},
+    "bootstrap": {path: "/kaihen/bin/bootstrap.bin", size: 28012},
+    "ro": {path: "/kaihen/bin/ro/main", size: 23854},
+    "hen": {path: "/kaihen/bin/hen/main", size: 78761},
+    "game": {path: "/kaihen/bin/game/main", size: 62943},
     "hbmenu": {path: "/hbmenu.nro", size: 11782782, optional: false},
     "programs": {path: "/switch/ounceshell.nro", size: 22249803}
 };

@@ -167,6 +167,15 @@ export async function run() {
     }
 
     const context = createContext();
+    // One launch per boot: after a completed run the HEN process owns the
+    // console state (original RO terminated, loader mount swapped) and a
+    // second launch re-does it against consumed state. Fail fast with the
+    // fix instead of dying somewhere deep in the bootstrap.
+    if (stageRecord("complete")) {
+        await khLog("this boot already completed a kaiHEN launch — " +
+            "power-cycle the console before running again");
+        check(false, "one launch per boot: power-cycle first");
+    }
     ensureArena(context);
     arenaSlots(context);
     // Close handles leaked by earlier failed runs on this boot (they release

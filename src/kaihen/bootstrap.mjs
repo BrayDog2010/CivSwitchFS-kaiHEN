@@ -4,7 +4,8 @@
 
 import runtime from "../core/runtime.mjs";
 import {check, khLog, hex, readU64LE, readU32LE, readNative,
-    writeNative, writeU64LE, arenaAlloc, arenaSlots, HEN_TITLE, RO_TITLE}
+    writeNative, writeU64LE, arenaAlloc, arenaSlots, u64Bytes,
+    HEN_TITLE, RO_TITLE}
     from "./state.mjs";
 import {buildNroImage, tryWaitAdapterBytes, runNroOnRawThread} from "./ro.mjs";
 import {bareSendTransport, cmifSend} from "./wire.mjs";
@@ -113,6 +114,59 @@ export async function runBootstrap(context, options = {}) {
     // moved to the loader-copy stage: fresh state, and the late-bootstrap
     // variant hit a heap-state flip where context.ep read armed and unarmed
     // with no intervening await (runs 119-127).
+
+    // BUSY gate (run140): the loader copy shares the loader's single-request
+    // server session with the game. If Civ7 has a loader request in flight
+    // at the NRO's op-16 dispatch, the kernel refuses ours with 0xF601 =
+    // svc Busy (kernel module 1, description 122 — NOT a Result from the
+    // loader server, and not session "poisoning": any in-flight request on
+    // the shared object blocks the second one; run109's "uninitialized
+    // clone" and the TS/SR/SB doomed-send fallout were the same thing).
+    // Slower transports (WiFi, undocked) shift the chain later into the
+    // game's content-mounting phase, so the loader is busy exactly then.
+    // Pre-play op-16's exact request (cmd 0, BuiltInSystem, attributes 1,
+    // HEN title — policies.cpp) until the session takes it, close the moved
+    // CodeFS, and only then start the NRO.
+    {
+        const idleDelay = globalThis.setTimeout ?
+            (ms) => new Promise(resolve => globalThis.setTimeout(resolve, ms)) :
+            () => khLog(".");
+        const slots = arenaSlots(context);
+        const gateInput = [1, 0, 0, 0, 0, 0, 0, 0].concat(u64Bytes(HEN_TITLE));
+        let idle = false, last = -1, busy = 0;
+        for (let attempt = 0; attempt < 150 && !idle; attempt++) {
+            const reply = cmifSend(context.loaderCopy.handle,
+                {pkt: slots.pkt, cmd: 0, input: gateInput,
+                    b: [{addr: slots.info + 32n, size: 0x1a4}]});
+            if (reply.transport === 0) {
+                last = reply.result;
+                if (reply.moves && reply.moves.length) {
+                    try { runtime.closeHandle(reply.moves[0]); }
+                    catch (closeError) { /* already gone */ }
+                }
+                idle = true;
+                break;
+            }
+            if (reply.transport === 0xF601) {
+                busy++;
+                if (busy % 25 === 1)
+                    await khLog("BS-cmd0 busy x" + busy + " — waiting");
+                await idleDelay(150);
+                continue;
+            }
+            last = reply.transport;
+            await khLog("BS-cmd0 unexpected transport " + hex(reply.transport));
+            break;
+        }
+        await khLog("BS-cmd0 " + (idle ? "idle result=" + hex(last) :
+            "NOT DISPATCHABLE last=" + hex(last)) + " busy=" + busy +
+            " ro=" + hex(context.ro.handle) +
+            " fs=" + hex(context.bootstrapFsRoot || context.fsRootDedicated) +
+            " loader=" + hex(context.loaderCopy.handle));
+        check(idle, "loader session never became idle (0xF601 x" + busy +
+            ") — the game holds the shared loader session; retry after a " +
+            "power-cycle");
+    }
 
     const result = await runNroOnRawThread(context, image, argsAddress,
         args.bytes, {
