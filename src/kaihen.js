@@ -439,22 +439,30 @@ export async function run() {
                     return {pkt, handle: domain.handle,
                         label: "control-test-" + index};
                 });
+                await khLog("GT0 packets built");
                 const worker = prepareGatedWorker(context, packets,
                     "gate-test");
+                await khLog("GT1 worker prepared handle=" + hex(worker.worker.handle));
                 await gate.parkSession();
+                await khLog("GT2 parked");
                 releaseGatedWorker(worker);
+                await khLog("GT3 released");
                 check(await gate.pending(),
                     "first worker request is not queued");
+                await khLog("GT4 pending");
                 const before = workerSendResults(worker);
                 check(Number(before[0]) === Number(coreRuntime.FRAME_SENTINEL),
                     "first request ran through the park");
                 await gate.step();
+                await khLog("GT5 stepped once");
                 const middle = workerSendResults(worker);
                 check(Number(middle[0]) === 0 && !workerFinished(worker) &&
                     await gate.pending(),
                     "gate did not release exactly one request");
                 await gate.step();
+                await khLog("GT6 stepped twice");
                 const results = joinGatedWorker(worker);
+                await khLog("GT7 joined");
                 check(results.every(value => Number(value) === 0),
                     "a stepped IPC response failed");
                 context.gateTest = {verified: true};
