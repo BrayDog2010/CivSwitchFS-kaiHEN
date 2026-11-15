@@ -53,15 +53,15 @@ export function buildCmif(pkt, options) {
         runtime.write32(pkt + BigInt(at), BigInt(Number(size & 0xffffffffn)));
         runtime.write32(pkt + BigInt(at + 4),
             BigInt(Number(address & 0xffffffffn)));
-        // Attribute parity with the recorded SDK traffic: send buffers
-        // attr 0, receive buffers attr 1 (NonSecureIpc). Empirical matrix
-        // (runs 74-79): WithContext reads with attr 0 or attr 3 get the
-        // session killed; attr 1 works byte-for-byte like the recording's
-        // read buffer. Plain-protocol reads with attr 3 also die (run79,
-        // ro/main). The old note about mode 1 rejected with kernel 0xE801
-        // by the bare svc-0x22 wrapper (run51) was that run's copy
-        // combination, not the attribute — the SDK itself sends attr 1.
-        const mode = aList.includes(descriptor) ? 0n : 1n;
+        // Attribute parity with the author's recorded engine (files.cjs):
+        // BOTH send and receive data buffers carry mode 1 (NonSecureIpc) —
+        // their donor writes (send, line 177) and reads (receive, lines
+        // 125/185) all use it. Empirically (runs 74-81): attr 0 or 3 on
+        // data buffers gets the session killed; attr 1 works everywhere
+        // it has been tried (WithContext npdm read, plain SD read). The
+        // one exception is the small 0x1a4 code-info receive buffer, which
+        // the recording sends as attr 0 and which works attr 0.
+        const mode = 1n;
         const word2 = (mode | ((address >> 36n) & 7n) << 2n |
             ((size >> 32n) & 0xfn) << 24n |
             ((address >> 32n) & 15n) << 28n);
