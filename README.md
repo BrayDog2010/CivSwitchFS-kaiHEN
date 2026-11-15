@@ -24,6 +24,7 @@ Beware that fs vuln can be risky to utilize and may corrupt things like your sav
 - Nintendo Switch 2, firmware **23.0.1** (only exFAT fw tested, FAT32 should work too). Do not use on lower firmware!
 - **Civilization VII 1.0.0**, physical cartridge
 - CivSwitch Remote JS Loader already running (follow [CivSwitch instructions](https://github.com/Gezine/CivSwitch))
+- kaiHEN 20261114d (later versions may not work)
 
 ## Requirements
 
