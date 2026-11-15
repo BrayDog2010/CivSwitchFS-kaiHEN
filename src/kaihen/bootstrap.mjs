@@ -35,19 +35,15 @@ export async function runBootstrap(context, options = {}) {
         " tracked=" + (context.handles ? context.handles.length : "?"));
     // Load bootstrap.bin from the staged SD file.
     const sd = openSdCard(context);
-    // The 20261114c bootstrap hardcodes /kaihen paths (its embedded
-    // strings: /kaihen/bin/hen/main + exefs.nsp; the bootstrap-src snapshot
-    // with /ouncehen is outdated). Stage the HEN main there — read from
-    // wherever the manifest put it (currently /ouncehen/bin/hen/main).
+    // The 20261114c binaries expect /kaihen paths throughout (bootstrap.bin
+    // and hen/main embedded strings; the bootstrap-src snapshot with
+    // /ouncehen is outdated). The launcher stages everything under
+    // /kaihen/bin — verify the HEN main is there before running.
     const henStaged = sdGetEntryType(context, sd, "/kaihen/bin/hen/main");
-    if (!(henStaged.transport === 0 && henStaged.result === 0)) {
-        const manifestHen = globalThis.__KH_MANIFEST.hen;
-        const henFile = sdReadFile(context, sd, manifestHen.path, 0x100000);
-        check(henFile.size === manifestHen.size,
-            "HEN main size differs from the manifest: " + henFile.size);
-        sdWriteFile(context, sd, "/kaihen/bin/hen/main", henFile.bytes);
-        await khLog("staged /kaihen/bin/hen/main (" + henFile.size + " bytes)");
-    } else await khLog("/kaihen/bin/hen/main already staged");
+    check(henStaged.transport === 0 && henStaged.result === 0,
+        "/kaihen/bin/hen/main is missing on SD — run the kaiHEN launcher " +
+        "to stage the /kaihen files");
+    await khLog("/kaihen/bin/hen/main staged");
     const staged = globalThis.__KH_MANIFEST.bootstrap;
     const bootstrapFile = sdReadFile(context, sd, staged.path, 0x100000);
     let text = bootstrapFile.bytes;

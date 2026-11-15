@@ -22,10 +22,10 @@ const DEFAULT_SHIP = path.join(ROOT_DIR, "..", "..", "kaiHEN-20261114c");
 const TIMEOUT_MS = 900_000;
 
 const sdPath = {
-    "bootstrap": "/ouncehen/bin/bootstrap.bin",
-    "ro": "/ouncehen/bin/ro/main",
+    "bootstrap": "/kaihen/bin/bootstrap.bin",
+    "ro": "/kaihen/bin/ro/main",
     "hen": "/kaihen/bin/hen/main",
-    "game": "/ouncehen/bin/game/main",
+    "game": "/kaihen/bin/game/main",
     "hbmenu": "/hbmenu.nro",
     "programs": "/switch/ounceshell.nro"
 };
