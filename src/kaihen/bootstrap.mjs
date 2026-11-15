@@ -164,8 +164,11 @@ export async function runBootstrap(context, options = {}) {
             " fs=" + hex(context.bootstrapFsRoot || context.fsRootDedicated) +
             " loader=" + hex(context.loaderCopy.handle));
         check(idle, "loader session never became idle (0xF601 x" + busy +
-            ") — the game holds the shared loader session; retry after a " +
-            "power-cycle");
+            ") — a request that never completed is wedging the shared " +
+            "loader session. The TS/SR/SB diagnostics and DX experiments do " +
+            "exactly this (skipped by default since run141; --probes/--dx " +
+            "opt back in). If neither ran, the game itself holds the " +
+            "session; retry after a power-cycle");
     }
 
     const result = await runNroOnRawThread(context, image, argsAddress,

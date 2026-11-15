@@ -37,6 +37,15 @@ function usage(code) {
   --force          restage files even when their size already matches
   --no-hbmenu      skip hbmenu.nro
   --no-programs    skip programs/
+  --probes         also run the TS/SR/SB diagnostics (off by default: their
+                   doomed code-opens wedge the shared loader session with a
+                   request that never completes — every later dispatch,
+                   including the bootstrap's op-16, returns kernel Busy
+                   0xF601; runs 140-141)
+  --dx             also run the DX experiments (off by default: DX19 swaps
+                   loaderCopy for a promoted-session copy that is only ever
+                   cmd-810-probed, never cmd-0)
+  --skip A,B       explicit skip list (overrides the defaults above)
 Requires the CivSwitch Remote JS Loader with a successful CivSwitchFS run.`);
     process.exit(code);
 }
@@ -54,8 +63,13 @@ function parse(args) {
         else if (arg === "--dir") options.ship = path.resolve(value());
         else if (arg === "--force") options.force = true;
         else if (arg === "--status-only") options.statusOnly = true;
-        else if (arg === "--skip") options.skip = value().split(",")
-            .map(name => name.trim()).filter(Boolean);
+        else if (arg === "--skip") {
+            options.skip = value().split(",")
+                .map(name => name.trim()).filter(Boolean);
+            options.skipExplicit = true;
+        }
+        else if (arg === "--probes") options.runProbes = true;
+        else if (arg === "--dx") options.runDx = true;
         else if (arg === "--no-hbmenu") options.hbmenu = false;
         else if (arg === "--no-programs") options.programs = false;
         else if (!options.console && /^\d+\.\d+\.\d+\.\d+$/.test(arg))
@@ -63,6 +77,16 @@ function parse(args) {
         else usage(1);
     }
     if (!options.console) usage(1);
+    if (!options.skipExplicit) {
+        // Default to the safe path: the TS/SR/SB diagnostics and the DX
+        // experiments each break the loader copy the bootstrap needs (see
+        // usage). Opt back in with --probes / --dx.
+        options.skip = ["dx", "probes"];
+        if (options.runProbes)
+            options.skip = options.skip.filter(name => name !== "probes");
+        if (options.runDx)
+            options.skip = options.skip.filter(name => name !== "dx");
+    }
     return options;
 }
 
@@ -266,8 +290,7 @@ async function main() {
             `globalThis.__KH_SKIP=${JSON.stringify(options.skip)};`,
             "skip prelude");
         console.log(`-- skipping stages: ${options.skip.join(", ")} --`);
-    }
-    const result = await send(options.console, port, built.payload, "run");
+    }    const result = await send(options.console, port, built.payload, "run");
     if (/HEN IS RUNNING/.test(result)) {
         console.log("\n-- kaiHEN is running. Close Civilization VII normally; " +
             "hold R while opening a native game. --");
