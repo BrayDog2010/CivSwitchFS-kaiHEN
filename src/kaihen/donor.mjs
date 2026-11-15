@@ -48,7 +48,10 @@ export async function prepareDonor(context, files) {
         }
     }
 
-    // Create and write both files with full readback verification.
+    // Create and write both files with full readback verification. A donor
+    // file left by an earlier run is REUSED when its content still matches
+    // (the author's donor-prepare: open, size, read, hash) and removed +
+    // committed away when stale — CreateFile on an existing path is 0x402.
     for (const name of ["main.npdm", "main"]) {
         const bytes = files[name];
         check(bytes && bytes.length > 0 && bytes.length <= 0x100000,
@@ -57,6 +60,51 @@ export async function prepareDonor(context, files) {
         const previous = donor.files.find(f => f.name === name);
         if (previous && previous.sha256 === digest) continue;
         check(!previous, "an incomplete donor write requires inspection");
+
+        let stale = false;
+        const exists = savePathPacket(context, handle, 7, name);
+        check(exists.transport === 0,
+            "donor existence '" + name + "' transport " + hex(exists.transport));
+        if (exists.result === 0) {
+            const opened = savePathPacket(context, handle, 8, name, [1, 0, 0, 0]);
+            const child = oneMovedHandle(opened, "donor reuse open /" + name);
+            try {
+                const slots = arenaSlots(context);
+                const sizeReply = cmifSend(child, {pkt: slots.pkt2, cmd: 4,
+                    input: [], rawWords: 8});
+                requireOk(sizeReply, "donor reuse size /" + name);
+                const size = readU64LE(
+                    readNative(slots.pkt2 + BigInt(sizeReply.dataAt), 8), 0);
+                check(size === BigInt(bytes.length),
+                    "existing donor /" + name + " size changed: " + size);
+                const chunks = [];
+                for (let at = 0; at < bytes.length; at += 0x10000) {
+                    const size2 = Math.min(0x10000, bytes.length - at);
+                    chunks.push(await readSaveChunk(context, child, at, size2));
+                }
+                let all = [];
+                for (const chunk of chunks) all = all.concat(chunk);
+                if (sha256(all) === digest) {
+                    donor.files.push({name, size: bytes.length,
+                        sha256: digest, verified: true, reused: true});
+                    await khLog("donor /" + name + " reused (hash matches)");
+                } else stale = true;
+            } finally {
+                closeHandle(child);
+            }
+            if (stale) {
+                const removed = savePathPacket(context, handle, 1, name);
+                requireOk(removed, "stale donor removal /" + name);
+                const commit = cmifSend(handle,
+                    {pkt: arenaSlots(context).pkt, cmd: 10, input: [], rawWords: 8});
+                requireOk(commit, "stale donor removal commit");
+                const gone = savePathPacket(context, handle, 7, name);
+                check(canonical(gone.result) === 0x202,
+                    "stale donor /" + name + " still exists: " + hex(gone.result));
+                await khLog("donor /" + name + " removed (stale)");
+            }
+        }
+        if (donor.files.some(f => f.name === name)) continue;
 
         const created = savePathPacket(context, handle, 0, name,
             [0, 0, 0, 0, 0, 0, 0, 0].concat(u64Bytes(BigInt(bytes.length))));
