@@ -23,13 +23,13 @@ function sha256(bytes) {
 function send(host, port, code, timeoutMs = 60_000) {
     const payload = Buffer.isBuffer(code) ? code : Buffer.from(code, "ascii");
     if (!payload.length || payload.length >= MAX_LOADER_BYTES)
-        return Promise.reject(new Error("Payload vide ou supérieur à 500 000 octets"));
+        return Promise.reject(new Error("Payload empty or over 500,000 bytes"));
     return new Promise((resolve, reject) => {
         const chunks = [];
         let settled = false;
         const socket = net.createConnection({host, port});
         const timeout = setTimeout(() => {
-            finish(new Error("Le loader n'a pas terminé le payload à temps"));
+            finish(new Error("The loader did not finish the payload in time"));
             socket.destroy();
         }, timeoutMs);
         function finish(error, value) {
@@ -55,7 +55,7 @@ function requireMarker(output, markers) {
             throw new Error(line.slice("Installation failed: ".length));
         if (markers.includes(line)) return line;
     }
-    throw new Error("Le loader n'a pas confirmé l'opération: " + output.slice(-240));
+    throw new Error("The loader did not acknowledge the operation: " + output.slice(-240));
 }
 
 async function runTask(host, port, expression, completion, markers, cleanup = false) {
@@ -82,7 +82,7 @@ async function install(host, port, bootstrapPath, templatePath) {
 
     const base64 = template.toString("base64");
     const token = randomUUID().replaceAll("-", "");
-    console.log("Préparation de l'image persistante…");
+    console.log("Preparing the persistent image…");
     requireMarker(
         await send(host, port, bootstrap.toString("ascii") + '\nlog("Installer ready.");'),
         ["Installer ready."]
@@ -105,8 +105,8 @@ async function install(host, port, bootstrapPath, templatePath) {
                 if (attempt === 2) throw error;
             }
         }
-        if (!acknowledged) throw new Error("Chunk template non confirmé; installation annulée");
-        console.log(`Template ${index}/${count} reçu.`);
+        if (!acknowledged) throw new Error("Template chunk not acknowledged; installation cancelled");
+        console.log(`Template ${index}/${count} received.`);
     }
 
     const installed = "Installed. Restart the game, then open Load Game menu.";
@@ -166,11 +166,11 @@ function parseArgs(args) {
         }
         if (arg === "--port" || arg === "--bootstrap" || arg === "--template") {
             const value = args[++index];
-            if (!value) throw new Error(`Valeur manquante pour ${arg}`);
+            if (!value) throw new Error(`Missing value for ${arg}`);
             const key = arg.slice(2);
             options[key] = key === "port" ? Number(value) : path.resolve(value);
         } else if (arg.startsWith("--")) {
-            throw new Error(`Option inconnue: ${arg}`);
+            throw new Error(`Unknown option: ${arg}`);
         } else positional.push(arg);
     }
     if (positional.length !== 1) {
@@ -181,9 +181,9 @@ function parseArgs(args) {
     if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535)
         throw new Error("Port invalide");
     if (options.debugPayload && options.minifyPayload)
-        throw new Error("Choisissez soit --debug-payload, soit --minify-payload");
+        throw new Error("Choose either --debug-payload or --minify-payload");
     if (options.payloadModeSpecified && !options.rebuild)
-        throw new Error("Le mode de payload exige la reconstruction; retirez --no-build");
+        throw new Error("Payload mode requires a rebuild; remove --no-build");
     return {host: positional[0], ...options};
 }
 
@@ -191,7 +191,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     try {
         const options = parseArgs(process.argv.slice(2));
         if (options.rebuild) {
-            console.log("Reconstruction de l'image persistante…");
+            console.log("Rebuilding the persistent image…");
             await buildPersistentImage({
                 debugPayload: options.debugPayload,
                 minifyPayload: options.minifyPayload,
@@ -200,7 +200,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         }
         await install(options.host, options.port, options.bootstrap, options.template);
     } catch (error) {
-        console.error("Installation échouée: " + error.message);
+        console.error("Installation failed: " + error.message);
         process.exitCode = 1;
     }
 }

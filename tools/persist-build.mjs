@@ -26,7 +26,7 @@ export async function buildPersistentImage(options = {}) {
     const debugPayload = options.debugPayload === true;
     const minifyPayload = options.minifyPayload === true;
     if (debugPayload && minifyPayload)
-        throw new Error("Choisissez soit --debug-payload, soit --minify-payload");
+        throw new Error("Choose either --debug-payload or --minify-payload");
     const corePath = options.corePath || path.join(PERSIST_DIR, "core.js");
     const templatePath = options.templatePath || path.join(PERSIST_DIR, "save_template.bin");
     const decoderPath = options.decoderPath || path.join(PERSIST_DIR, "compress_stage.js");
@@ -41,17 +41,17 @@ export async function buildPersistentImage(options = {}) {
         readFile(path.join(ROOT, "package.json"), "utf8")
     ]);
     if (sha256(core) !== CORE_SHA256)
-        throw new Error("Bootstrap CivSwitch non reconnu: empreinte différente");
+        throw new Error("CivSwitch bootstrap not recognized: different fingerprint");
     if (sha256(template) !== TEMPLATE_SHA256)
-        throw new Error("Template Civ VII non reconnu: empreinte différente");
+        throw new Error("Civ VII template not recognized: different fingerprint");
     if (sha256(decoderSource) !== DECODER_SHA256)
-        throw new Error("Décodeur de stage non reconnu: empreinte différente");
+        throw new Error("Stage decoder not recognized: different fingerprint");
     if (!upstreamLicense.includes("Copyright (c) 2026 Gezine") ||
         !upstreamLicense.includes("Permission is hereby granted"))
-        throw new Error("Licence du bootstrap CivSwitch non reconnue");
+        throw new Error("CivSwitch bootstrap license not recognized");
 
     const decoderMatch = decoderSource.match(/const DECODER = `([\s\S]*?)`;/);
-    if (!decoderMatch) throw new Error("Décodeur de stage manquant");
+    if (!decoderMatch) throw new Error("Stage decoder missing");
 
     const [payload, visualPrelude] = await Promise.all([
         buildPayload({
@@ -90,7 +90,7 @@ export async function buildPersistentImage(options = {}) {
         decoder + "\neval(" + decodeExpression + ");\n";
     const stageBytes = Buffer.from(stage, "ascii");
     if (!/^[\x00-\x7f]*$/.test(stage) || stageBytes.length > MAX_STAGE_BYTES)
-        throw new Error("Image persistante trop grande ou non ASCII");
+        throw new Error("Persistent image too large or not ASCII");
 
     const image = {
         profile: PROFILE,
@@ -178,14 +178,14 @@ export async function buildPersistentImage(options = {}) {
     const payloadMode = image.debugPayload
         ? "diagnostic, sans minification"
         : image.minifyPayload
-            ? "minifié (noms ESM raccourcis)"
-            : "espaces compactés, noms conservés";
+            ? "minified (ESM names shortened)"
+            : "whitespace compacted, names preserved";
     console.log(
-        `Image persistante: ${image.bytes} octets; bootstrap: ` +
-        `${Buffer.byteLength(bootstrapText)} octets; payload: ${payload.bytes}` +
-        ` octets (${payloadMode}).`
+        `Persistent image: ${image.bytes} bytes; bootstrap: ` +
+        `${Buffer.byteLength(bootstrapText)} bytes; payload: ${payload.bytes}` +
+        ` bytes (${payloadMode}).`
     );
-    console.log("Aucune installation n'a été lancée.");
+    console.log("No installation was started.");
     return {image, standalone, bootstrap: bootstrapText, manifest};
 }
 
@@ -235,7 +235,7 @@ async function buildPersistedVisualPrelude() {
 
 function injectPersistedVisuals(core, visualPrelude) {
     if (core.split(EARLY_VISUALS_ANCHOR).length !== 2)
-        throw new Error("Bootstrap CivSwitch non reconnu: visual anchor ambiguous");
+        throw new Error("CivSwitch bootstrap not recognized: visual anchor ambiguous");
 
     let result = core.replace(
         EARLY_VISUALS_ANCHOR,
@@ -244,11 +244,11 @@ function injectPersistedVisuals(core, visualPrelude) {
 
     const relayStart = result.indexOf(LOG_RELAY_ANCHOR);
     if (relayStart < 0 || result.indexOf(LOG_RELAY_ANCHOR, relayStart + 1) >= 0)
-        throw new Error("Bootstrap CivSwitch non reconnu: log relay anchor ambiguous");
+        throw new Error("CivSwitch bootstrap not recognized: log relay anchor ambiguous");
     const relayEndMarker = "        };\n\n        function create_socket() {";
     const relayEnd = result.indexOf(relayEndMarker, relayStart);
     if (relayEnd < 0)
-        throw new Error("Bootstrap CivSwitch non reconnu: log relay end missing");
+        throw new Error("CivSwitch bootstrap not recognized: log relay end missing");
 
     const relay = `        globalThis.__CIVSWITCHFS_PERSIST_LOG_FORWARDER__ = function (message) {
             if (_log_socket_fd === null) return;
@@ -266,7 +266,7 @@ function injectPersistedVisuals(core, visualPrelude) {
 
 function injectPayload(core, payload) {
     if (core.split(BOOTSTRAP_ANCHOR).length !== 2)
-        throw new Error("Bootstrap CivSwitch non reconnu: anchor ambiguous");
+        throw new Error("CivSwitch bootstrap not recognized: anchor ambiguous");
     return core.replace(BOOTSTRAP_ANCHOR, standaloneEntry(payload) + BOOTSTRAP_ANCHOR);
 }
 
@@ -312,14 +312,14 @@ function readOptions(args) {
         }
         if (["--core", "--template", "--decoder"].includes(arg)) {
             const value = args[++index];
-            if (!value) throw new Error(`Valeur manquante pour ${arg}`);
+            if (!value) throw new Error(`Missing value for ${arg}`);
             options[arg.slice(2) + "Path"] = path.resolve(value);
             continue;
         }
-        throw new Error(`Option inconnue: ${arg}`);
+        throw new Error(`Unknown option: ${arg}`);
     }
     if (options.debugPayload && options.minifyPayload)
-        throw new Error("Choisissez soit --debug-payload, soit --minify-payload");
+        throw new Error("Choose either --debug-payload or --minify-payload");
     return options;
 }
 
@@ -327,7 +327,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     try {
         await buildPersistentImage(readOptions(process.argv.slice(2)));
     } catch (error) {
-        console.error("Build persistence échoué: " + error.message);
+        console.error("Persistence build failed: " + error.message);
         process.exitCode = 1;
     }
 }
