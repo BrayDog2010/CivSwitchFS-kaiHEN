@@ -134,10 +134,10 @@ export async function runBootstrap(context, options = {}) {
         const lrow = context.bound.rows.find(
             r => r.domain === context.loaderRoot.domain);
         const rowState = lrow ? Number(readU32LE(
-            await readFs(context, lrow.address + 0x40n, 4), 0)) : -1;
+            await readFs(context, lrow.address + 0x40, 4), 0)) : -1;
         const donor = context.donorRow;
         const donorRefs = donor ? Number(readU32LE(
-            await readFs(context, donor.object + 0x38n, 4), 0)) : -1;
+            await readFs(context, donor.object + 0x38, 4), 0)) : -1;
         const donorVptrOk = donor ? Number(readU64LE(
             await readFs(context, donor.object, 8), 0)) === donor.vptr
             : false;
