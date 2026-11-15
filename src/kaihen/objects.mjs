@@ -190,7 +190,8 @@ export async function openInspectionDomain(context) {
 
 // Borrow our inspection-domain slot once to copy the Loader's root session
 // (reference copy-loader-root). Returns the copied root handle in the game.
-export async function copyLoaderRoot(context) {
+export async function copyLoaderRoot(context, options = {}) {
+    const mint = !!(options && options.mint);
     const layout = context.layout;
     const owned = context.inspectionDomain;
     const target = context.loaderRoot;
@@ -251,12 +252,24 @@ export async function copyLoaderRoot(context) {
     const restoredEntry = await readFs(context, ownEntry + 0x18, 0x18);
     check(bytesEqual(restoredEntry, original.slice(0x18)),
         "owned domain slot did not restore");
-    check(await fsU32(context, ownObject + 0x38) === 1 &&
-        await fsU32(context, target.object + 0x38) === 2,
-        "unexpected reference counts after the Loader copy");
+    if (mint) {
+        // A minted (disposable) copy: the first copy already holds a
+        // reference, so target refs are 3 here, not 2 — log instead of
+        // assert, and do not touch context.loaderCopy.
+        await khLog("mint refs own=" +
+            Number(await fsU32(context, ownObject + 0x38)) +
+            " target=" + Number(await fsU32(context, target.object + 0x38)));
+    } else {
+        check(await fsU32(context, ownObject + 0x38) === 1 &&
+            await fsU32(context, target.object + 0x38) === 2,
+            "unexpected reference counts after the Loader copy");
+    }
 
-    context.loaderCopy = {handle: copyHandle, ownDomain, ownObject, ownEntry,
-        target, ownBefore, targetBefore};
-    await khLog("loader root copied as handle " + hex(copyHandle));
+    if (!mint) {
+        context.loaderCopy = {handle: copyHandle, ownDomain, ownObject, ownEntry,
+            target, ownBefore, targetBefore};
+    }
+    await khLog((mint ? "loader root minted as handle " :
+        "loader root copied as handle ") + hex(copyHandle));
     return copyHandle;
 }

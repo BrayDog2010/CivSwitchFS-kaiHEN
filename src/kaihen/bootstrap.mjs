@@ -10,11 +10,9 @@ import {check, khLog, hex, readU64LE, readU32LE, readNative,
 import {buildNroImage, tryWaitAdapterBytes, runNroOnRawThread} from "./ro.mjs";
 import {bareSendTransport, cmifSend} from "./wire.mjs";
 import {sendContext} from "./wire-context.mjs";
-import {readFs, writeFs, writeFsUnverified, armEndpoint} from "./endpoint.mjs";
-import {cancelApiWorkers} from "./workers.mjs";
-import {exportHandle} from "./objects.mjs";
-import {domainEntries} from "./launch.mjs";
-import {instantSendProbe} from "./instant-send.mjs";
+import {readFs, writeFs, armEndpoint} from "./endpoint.mjs";
+import {copyLoaderRoot, exportHandle} from "./objects.mjs";
+import {openCodeFileSystem} from "./codefs.mjs";
 import {sdReadFile, openSdCard, sdGetEntryType, sdWriteFile}
     from "./sdcard.mjs";
 
@@ -119,294 +117,52 @@ export async function runBootstrap(context, options = {}) {
     // variant hit a heap-state flip where context.ep read armed and unarmed
     // with no intervening await (runs 119-127).
 
-    // BUSY gate (run140): the loader copy shares the loader's single-request
-    // server session with the game. If Civ7 has a loader request in flight
-    // at the NRO's op-16 dispatch, the kernel refuses ours with 0xF601 =
-    // svc Busy (kernel module 1, description 122 — NOT a Result from the
-    // loader server, and not session "poisoning": any in-flight request on
-    // the shared object blocks the second one; run109's "uninitialized
-    // clone" and the TS/SR/SB doomed-send fallout were the same thing).
-    // Slower transports (WiFi, undocked) shift the chain later into the
-    // game's content-mounting phase, so the loader is busy exactly then.
-    // Pre-play op-16's exact request (cmd 0, BuiltInSystem, attributes 1,
-    // HEN title — policies.cpp) until the session takes it, close the moved
-    // CodeFS, and only then start the NRO.
+    // SessionClosed discipline (second opinion, runs 160+): 0xF601 is
+    // kernel SessionClosed (module 1, description 123 — NOT Busy; Busy is
+    // 0xF401, and 0xE401 = InvalidHandle confirmed the encoding). fs
+    // closes a session when a request errors before its handler (sf_hipc
+    // server manager R_CATCH_ALL -> CloseSessionImpl), so any malformed
+    // send on the copy closes it for the NRO too — the SDK dispatcher's
+    // 0x25A0B on those sends is the closed-session rejection. The author's
+    // flow sends NOTHING on the copy between creation and the NRO's op-16,
+    // and run139 (docked, pre-play-free) matched it. Our pre-play gate
+    // (runs 142-159) closed the session ourselves. The original copy is
+    // now never probed: read-only health checks only, and ONE disposable
+    // minted copy absorbs the probe (the CC-open shape, result=0 on every
+    // boot since run 74).
     {
-        const idleDelay = globalThis.setTimeout ?
-            (ms) => new Promise(resolve => globalThis.setTimeout(resolve, ms)) :
-            () => khLog(".");
-        const slots = arenaSlots(context);
-        const gateInput = [1, 0, 0, 0, 0, 0, 0, 0].concat(u64Bytes(HEN_TITLE));
-        // 240 x 500ms = a 2-minute budget: the game's menu-time content /
-        // entitlement checks (network-bound; fast on Ethernet, slow on WiFi)
-        // keep a mount request in flight on the loader domain session for
-        // what can be tens of seconds — runs 142/143 saturate a 22.5s
-        // window 150/150 on WiFi where docked/Ethernet runs idle at once.
-        let idle = false, last = -1, busy = 0;
-        const gateStart = Date.now();
-        let tablePrev = null;
-        for (let attempt = 0; attempt < 240 && !idle; attempt++) {
-            const reply = cmifSend(context.loaderCopy.handle,
-                {pkt: slots.pkt, cmd: 0, input: gateInput,
-                    b: [{addr: slots.info + 32n, size: 0x1a4}]});
-            if (reply.transport === 0) {
-                last = reply.result;
-                if (reply.moves && reply.moves.length) {
-                    try { runtime.closeHandle(reply.moves[0]); }
-                    catch (closeError) { /* already gone */ }
-                }
-                idle = true;
-                break;
-            }
-            if (reply.transport === 0xF601) {
-                busy++;
-                if (busy === 1) {
-                    // Dump the loader's fs-side row once: wait word, state,
-                    // and the FULL request buffer identify the hung dispatch.
-                    // (run147: state=1, hdr=0x6 = a type-6 WithContext
-                    // request sits RECEIVED BUT UNDISPATCHED in the buffer —
-                    // the loader's, one-in-flight-per-session, hence the
-                    // permanent kernel Busy.)
-                    try {
-                        const row = context.bound.rows.find(
-                            r => r.domain === context.loaderRoot.domain);
-                        if (row) {
-                            const b = await readFs(context, row.address, 0x88);
-                            const req = await readFs(context, row.request, 0x100);
-                            await khLog("BS-row state=" + readU32LE(b, 0x40) +
-                                " parent=" + hex(readU64LE(b, 0x28)) +
-                                " wait=" + hex(readU32LE(b, 0x30)) +
-                                " recvRes=" + readU32LE(b, 0x44) +
-                                " hdr=" + hex(readU32LE(req, 0)));
-                            for (let o = 0; o < 0x100; o += 0x40)
-                                await khLog("BS-row req+" + o.toString(16) +
-                                    " [" + [0, 4, 8, 12, 16, 20, 24, 28, 32, 36,
-                                        40, 44, 48, 52, 56, 60].map(w =>
-                                        hex(readU32LE(req, o + w))).join(" ") + "]");
-                        } else await khLog("BS-row not found in bound.rows");
-                    } catch (dumpError) {
-                        await khLog("BS-row dump failed: " +
-                            (dumpError && dumpError.message ?
-                                dumpError.message : dumpError));
-                    }
-                }
-                if (busy === 8 || busy === 60) {
-                    // Unwedge v2 (run147 taught us): the stuck request is
-                    // RECEIVED in the row buffer but fs's wait loop never
-                    // selects the row to dispatch it. Do NOT park (park's
-                    // empty step overwrites the header) and do NOT step
-                    // (nothing is queued server-side, its precondition
-                    // refuses). Instead: raw-select the row once — the same
-                    // selection-store injectHolder does — so fs's loop wakes
-                    // the session, dispatches the buffered request, and
-                    // replies it. Then poll for the drain.
-                    try {
-                        const row = context.bound.rows.find(
-                            r => r.domain === context.loaderRoot.domain);
-                        check(row, "the loader row is missing from bound.rows");
-                        const b = await readFs(context, row.address, 0x88);
-                        const parent = Number(readU64LE(b, 0x28));
-                        const header = Number(readU32LE(
-                            await readFs(context, row.request, 4), 0));
-                        check(readU32LE(b, 0x40) === 1 &&
-                            context.layout.waiters.includes(parent),
-                            "row is not idle on a known waiter (state=" +
-                            readU32LE(b, 0x40) + " parent=" + hex(parent) + ")");
-                        const rawBytes = [];
-                        for (let i = 0; i < 16; i += 2)
-                            rawBytes.push(parseInt(row.raw.substr(i, 2), 16));
-                        check(readU64LE(b, 0) === readU64LE(rawBytes, 0) &&
-                            readU64LE(b, 0x70) === BigInt(row.domain) &&
-                            readU64LE(b, 0x78) === BigInt(row.metadata),
-                            "row identity changed");
-                        check(header !== 0xffffffff,
-                            busy === 8 ?
-                                "no buffered request (header already sentinel)" :
-                                "no buffered request left to dispatch");
-                        const selected = readU64LE(
-                            await readFs(context, parent + 0x10, 8), 0);
-                        check(selected === 0n,
-                            "a selection is already pending (" + hex(selected) + ")");
-                        await khLog("BS-unwedge2 selecting row=" +
-                            hex(row.address) + " hdr=" + hex(header));
-                        await writeFsUnverified(context, parent + 0x10,
-                            u64Bytes(BigInt(row.address)));
-                        cancelApiWorkers(context);
-                        // Give fs's loop the moment and poll the drain.
-                        for (let drain = 0; drain < 12 && !idle; drain++) {
-                            await idleDelay(500);
-                            const probe = cmifSend(context.loaderCopy.handle,
-                                {pkt: slots.pkt, cmd: 0, input: gateInput,
-                                    b: [{addr: slots.info + 32n, size: 0x1a4}]});
-                            if (probe.transport === 0) {
-                                last = probe.result;
-                                if (probe.moves && probe.moves.length) {
-                                    try { runtime.closeHandle(probe.moves[0]); }
-                                    catch (closeError) { /* already gone */ }
-                                }
-                                idle = true;
-                                await khLog("BS-unwedge2 DRAINED +" +
-                                    Math.round((Date.now() - gateStart) / 1000) + "s");
-                            }
-                        }
-                        if (!idle)
-                            await khLog("BS-unwedge2 did not drain (attempt at busy=" +
-                                busy + ")");
-                    } catch (unwedgeError) {
-                        await khLog("BS-unwedge2 failed: " +
-                            (unwedgeError && unwedgeError.message ?
-                                unwedgeError.message : unwedgeError));
-                    }
-                }
-                if (busy === 5 || busy === 45) {
-                    // Domain-table churn snapshot: the drain logs' open/close
-                    // cycles (open 151 -> close 151 -> open 151) suggest the
-                    // loader RETRY-CYCLES the npdm open on the swapped CodeFS
-                    // (each attempt serviced, failing, re-issued) rather than
-                    // one request sitting wedged. Churn between snapshots =
-                    // retry loop; a frozen table = true wedge.
-                    try {
-                        const entries = await domainEntries(context,
-                            context.loaderRoot.domain);
-                        const map = {};
-                        for (const entry of entries) map[entry.id] = entry.object;
-                        const ids = Object.keys(map).map(Number).sort((a, b) => a - b);
-                        await khLog("BS-table n=" + ids.length + " ids=" +
-                            ids.slice(0, 24).join(",") +
-                            (ids.length > 24 ? ",…" : ""));
-                        if (tablePrev) {
-                            const added = ids.filter(id => !(id in tablePrev));
-                            const removed = Object.keys(tablePrev)
-                                .map(Number).filter(id => !(id in map));
-                            const moved = ids.filter(id => id in tablePrev &&
-                                tablePrev[id] !== map[id]);
-                            await khLog("BS-table verdict: " +
-                                (added.length || removed.length || moved.length ?
-                                    "CHURNED (retry loop) +" : "FROZEN (true wedge)") +
-                                (added.length ? " added=" + added.join(",") : "") +
-                                (removed.length ? " removed=" + removed.join(",") : "") +
-                                (moved.length ? " moved=" + moved.join(",") : ""));
-                        }
-                        tablePrev = map;
-                    } catch (tableError) {
-                        await khLog("BS-table snapshot failed: " +
-                            (tableError && tableError.message ?
-                                tableError.message : tableError));
-                    }
-                }
-                if (busy === 12) {
-                    // Dead-id reoccupy (run154: the wedged request routes to
-                    // domain id 150, which the teardown REMOVED — BS-table
-                    // n=1 ids=9, FROZEN — and fs never replies requests to
-                    // dead ids). The IS domain code-open CREATES a domain
-                    // entry; with 150 freed, the allocator may reuse the
-                    // slot. If the new entry lands at 150 pointing at a real
-                    // CodeFS, the dead-id dispatch resolves and the wedge
-                    // drains. IS1/IS2/IS3 lines reveal the added id.
-                    try {
-                        await khLog("BS-reoccupy: domain code-open to reseed " +
-                            "the freed slot");
-                        await instantSendProbe(context, RO_TITLE);
-                    } catch (reoccupyError) {
-                        await khLog("BS-reoccupy failed: " +
-                            (reoccupyError && reoccupyError.message ?
-                                reoccupyError.message : reoccupyError));
-                    }
-                }
-                if (busy === 16) {
-                    // Splice (v4): reseed the DEAD id in the LOADER's own
-                    // domain list by hand. The IS reoccupy (busy==12) seeds
-                    // the INSPECTION domain's list — domains own the entries
-                    // their own sessions create — but the wedged request
-                    // rides the loader's session and resolves against the
-                    // loader's list. Fill the dead slot (owner, object =
-                    // donor, metadata), then link it at the list tail.
-                    try {
-                        const lrow = context.bound.rows.find(
-                            r => r.domain === context.loaderRoot.domain);
-                        check(lrow, "the loader row is missing");
-                        const reqHead = await readFs(context, lrow.request, 0x18);
-                        const deadId = Number(readU32LE(reqHead, 0x14));
-                        check(deadId > 1 && deadId < context.layout.count,
-                            "implausible dead id " + deadId);
-                        const slot = context.layout.table + (deadId - 1) * 0x30;
-                        const donor = context.donorRow;
-                        check(donor && donor.object && donor.metadata,
-                            "the donor row is missing");
-                        const slotBytes = await readFs(context, slot, 0x30);
-                        const slotOwner = Number(readU64LE(slotBytes, 0x18));
-                        check(slotOwner === 0 || slotOwner === context.loaderRoot.domain,
-                            "the dead slot was reallocated (owner=" +
-                                hex(slotOwner) + ")");
-                        let refs = Number(readU32LE(
-                            await readFs(context, donor.object + 0x38n, 4), 0));
-                        await khLog("BS-splice dead id=" + deadId + " slot=" +
-                            hex(slot) + " owner=" + hex(slotOwner) +
-                            " donorRefs=" + refs);
-                        if (refs < 1) {
-                            await writeFs(context, donor.object + 0x38n,
-                                [1, 0, 0, 0]);
-                            await khLog("BS-splice bumped the donor refcount 0 -> 1");
-                        }
-                        // Fill the slot first (unlinked = inert): next =
-                        // sentinel, owner = loader domain, object + metadata
-                        // = the donor's.
-                        const sentinel = context.loaderRoot.domain + 0x20;
-                        const filled = new Array(0x30).fill(0);
-                        const put64 = (at, value) => {
-                            for (let b = 0; b < 8; b++)
-                                filled[at + b] = Number((BigInt(value) >>
-                                    BigInt(8 * b)) & 0xffn);
-                        };
-                        put64(0x00, sentinel);
-                        put64(0x18, context.loaderRoot.domain);
-                        put64(0x20, donor.object);
-                        put64(0x28, donor.metadata);
-                        await writeFs(context, slot, filled);
-                        // Link at the tail: walk to the last live entry and
-                        // swap its next from the sentinel to our slot.
-                        let at = Number(readU64LE(
-                            await readFs(context, sentinel, 8), 0));
-                        let tail = sentinel, hops = 0;
-                        while (at !== sentinel && hops < 128) {
-                            tail = at;
-                            at = Number(readU64LE(
-                                await readFs(context, at, 8), 0));
-                            hops++;
-                        }
-                        await compareWriteFs(context, tail,
-                            u64Bytes(BigInt(sentinel)), u64Bytes(BigInt(slot)));
-                        await khLog("BS-splice linked id " + deadId +
-                            " after " + (tail === sentinel ? "the sentinel" :
-                                "the tail") + " (" + hops + " hops)");
-                    } catch (spliceError) {
-                        await khLog("BS-splice failed: " +
-                            (spliceError && spliceError.message ?
-                                spliceError.message : spliceError));
-                    }
-                }
-                if (idle) break;  // drained by the unwedge — run the NRO now
-                if (busy % 10 === 1)
-                    await khLog("BS-cmd0 busy x" + busy + " +" +
-                        Math.round((Date.now() - gateStart) / 1000) + "s — waiting");
-                await idleDelay(500);
-                continue;
-            }
-            last = reply.transport;
-            await khLog("BS-cmd0 unexpected transport " + hex(reply.transport));
-            break;
+        const lrow = context.bound.rows.find(
+            r => r.domain === context.loaderRoot.domain);
+        const rowState = lrow ? Number(readU32LE(
+            await readFs(context, lrow.address + 0x40n, 4), 0)) : -1;
+        const donor = context.donorRow;
+        const donorRefs = donor ? Number(readU32LE(
+            await readFs(context, donor.object + 0x38n, 4), 0)) : -1;
+        const donorVptrOk = donor ? Number(readU64LE(
+            await readFs(context, donor.object, 8), 0)) === donor.vptr
+            : false;
+        await khLog("BS-health row state=" + rowState +
+            " donorRefs=" + donorRefs + " donorVptrOk=" + donorVptrOk +
+            " original copy=" + hex(context.loaderCopy.handle));
+        const original = context.loaderCopy;
+        const savedCodefs = context.codefs;
+        try {
+            const disposable = await copyLoaderRoot(context, {mint: true});
+            await khLog("BS-disposable copy " + hex(disposable));
+            const probe = openCodeFileSystem(context, disposable, RO_TITLE);
+            runtime.closeHandle(probe.handle);
+            await khLog("BS-disposable probe OK (CC shape, result=0) — " +
+                "session class alive; the NRO runs on the untouched " +
+                "original");
+        } catch (probeError) {
+            await khLog("BS-disposable probe failed: " +
+                (probeError && probeError.message ? probeError.message :
+                    probeError) + " — running the NRO on the untouched " +
+                "original regardless (its verdict is the truth)");
+        } finally {
+            context.loaderCopy = original;
+            context.codefs = savedCodefs;
         }
-        await khLog("BS-cmd0 " + (idle ? "idle result=" + hex(last) :
-            "NOT DISPATCHABLE last=" + hex(last)) + " busy=" + busy +
-            " ro=" + hex(context.ro.handle) +
-            " fs=" + hex(context.bootstrapFsRoot || context.fsRootDedicated) +
-            " loader=" + hex(context.loaderCopy.handle));
-        check(idle, "loader session never became idle (0xF601 x" + busy +
-            ") — a request that never completed is wedging the shared " +
-            "loader session. The TS/SR/SB diagnostics and DX experiments do " +
-            "exactly this (skipped by default since run141; --probes/--dx " +
-            "opt back in). If neither ran, the game itself holds the " +
-            "session; retry after a power-cycle");
     }
 
     const result = await runNroOnRawThread(context, image, argsAddress,
