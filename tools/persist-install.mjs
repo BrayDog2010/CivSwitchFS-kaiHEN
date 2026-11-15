@@ -130,6 +130,7 @@ function parseArgs(args) {
         rebuild: true,
         debugPayload: false,
         minifyPayload: false,
+        chain: false,
         payloadModeSpecified: false
     };
     for (let index = 0; index < args.length; index++) {
@@ -148,6 +149,11 @@ function parseArgs(args) {
             options.payloadModeSpecified = true;
             continue;
         }
+        if (arg === "--chain") {
+            options.chain = true;
+            options.payloadModeSpecified = true;
+            continue;
+        }
         if (arg === "--port" || arg === "--bootstrap" || arg === "--template") {
             const value = args[++index];
             if (!value) throw new Error(`Valeur manquante pour ${arg}`);
@@ -160,7 +166,7 @@ function parseArgs(args) {
     if (positional.length !== 1) {
         throw new Error("Usage: npm run persist:install -- <IP_SWITCH> " +
             "[--port 9026] [--no-build] [--minify-payload | --debug-payload] " +
-            "[--bootstrap path] [--template path]");
+            "[--chain] [--bootstrap path] [--template path]");
     }
     if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535)
         throw new Error("Port invalide");
@@ -178,7 +184,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
             console.log("Reconstruction de l'image persistante…");
             await buildPersistentImage({
                 debugPayload: options.debugPayload,
-                minifyPayload: options.minifyPayload
+                minifyPayload: options.minifyPayload,
+                chain: options.chain
             });
         }
         await install(options.host, options.port, options.bootstrap, options.template);

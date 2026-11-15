@@ -55,6 +55,8 @@ export async function buildPersistentImage(options = {}) {
 
     const [payload, visualPrelude] = await Promise.all([
         buildPayload({
+            entry: options.chain ?
+                path.join(ROOT, "src/chain.mjs") : undefined,
             debug: debugPayload,
             minifyIdentifiers: minifyPayload
         }),
@@ -92,10 +94,12 @@ export async function buildPersistentImage(options = {}) {
 
     const image = {
         profile: PROFILE,
-        version: "civswitchfs-" + JSON.parse(packageJson).version,
+        version: "civswitchfs-" + JSON.parse(packageJson).version +
+            (options.chain ? "+kaihen" : ""),
         stage,
         bytes: stageBytes.length,
         sha256: sha256(stageBytes),
+        chain: options.chain === true,
         triggerTiming: false,
         hideTriggerText: !options.showText,
         debugPayload,
@@ -274,10 +278,15 @@ function readOptions(args) {
     const options = {
         showText: false,
         debugPayload: false,
-        minifyPayload: false
+        minifyPayload: false,
+        chain: false
     };
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
+        if (arg === "--chain") {
+            options.chain = true;
+            continue;
+        }
         if (arg === "--show-text") {
             options.showText = true;
             continue;
