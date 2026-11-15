@@ -60,10 +60,8 @@ export async function runBootstrap(context, options = {}) {
                 writeNative(address, args.bytes);
             }
         });
-    check(result.returned === 0,
-        "bootstrap returned error " + result.returned);
-
-    // The bootstrap published its record at args+408.
+    // The bootstrap published its record at args+408 — read it BEFORE any
+    // return-value check so a failure names the failing operation.
     const recordBytes = readNative(argsAddress + 408n, 24);
     const record = {
         operation: readU32LE(recordBytes, 0),
@@ -72,6 +70,13 @@ export async function runBootstrap(context, options = {}) {
         gateRestoreResult: readU32LE(recordBytes, 16),
         channelRestoreResult: readU32LE(recordBytes, 20)
     };
+    await khLog("HEN startup record: operation=" + record.operation +
+        " result=0x" + record.result.toString(16) + " pid=" + record.pid +
+        " returned=" + result.returned +
+        " gateRestore=0x" + record.gateRestoreResult.toString(16) +
+        " channelRestore=0x" + record.channelRestoreResult.toString(16));
+    check(result.returned === 0,
+        "bootstrap returned error " + result.returned);
     check(record.operation === 10,
         "startup operation " + record.operation + " did not reach Complete");
     check(record.result === 0,
