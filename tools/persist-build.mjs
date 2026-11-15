@@ -278,7 +278,7 @@ function readOptions(args) {
     const options = {
         showText: false,
         debugPayload: false,
-        minifyPayload: false,
+        minifyPayload: true,
         chain: false
     };
     for (let index = 0; index < args.length; index++) {
@@ -293,9 +293,12 @@ function readOptions(args) {
         }
         if (arg === "--debug-payload") {
             options.debugPayload = true;
+            options.minifyPayload = false;
             continue;
         }
         if (arg === "--minify-payload") {
+            // Minification is the default now; the flag stays accepted
+            // as an explicit no-op.
             options.minifyPayload = true;
             continue;
         }

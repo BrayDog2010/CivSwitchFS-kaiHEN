@@ -78,6 +78,11 @@ If a file is missing, the chain refuses right after the promotion with
 `npm run persist:install -- <console-ip>` reinstalls the promotion-only
 image and takes the kaiHEN chain back out of the save.
 
+Both installers minify the payload by default. For crash debugging,
+`--debug-payload` builds the promotion-only image with readable names;
+the unminified chain image does not fit the loader's 500 KB payload
+limit, so chain builds are always minified.
+
 ### Launch the exploit
 
 If you are not going for persistence, just start the CivSwitch Remote JS Loader

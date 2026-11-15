@@ -129,7 +129,7 @@ function parseArgs(args) {
         template: TEMPLATE,
         rebuild: true,
         debugPayload: false,
-        minifyPayload: false,
+        minifyPayload: true,
         chain: false,
         payloadModeSpecified: false
     };
@@ -141,10 +141,12 @@ function parseArgs(args) {
         }
         if (arg === "--debug-payload") {
             options.debugPayload = true;
+            options.minifyPayload = false;
             options.payloadModeSpecified = true;
             continue;
         }
         if (arg === "--minify-payload") {
+            // Minification is the default now; accepted as a no-op.
             options.minifyPayload = true;
             options.payloadModeSpecified = true;
             continue;
@@ -165,8 +167,8 @@ function parseArgs(args) {
     }
     if (positional.length !== 1) {
         throw new Error("Usage: npm run persist:install -- <IP_SWITCH> " +
-            "[--port 9026] [--no-build] [--minify-payload | --debug-payload] " +
-            "[--chain] [--bootstrap path] [--template path]");
+            "[--port 9026] [--no-build] [--debug-payload] [--chain] " +
+            "[--bootstrap path] [--template path]  (payload minified by default)");
     }
     if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535)
         throw new Error("Port invalide");
