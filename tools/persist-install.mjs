@@ -109,7 +109,7 @@ async function install(host, port, bootstrapPath, templatePath) {
         console.log(`Template ${index}/${count} reçu.`);
     }
 
-    const installed = "Installed. Restart the game, then Load a game.";
+    const installed = "Installed. Restart the game, then open Load Game menu.";
     const result = await runTask(
         host,
         port,

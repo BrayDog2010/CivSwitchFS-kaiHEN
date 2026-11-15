@@ -202,7 +202,7 @@ window.__cfsCreateInstaller = function (options) {
                     await fs.writeNew(sourcePath, candidate);
                     fs.commit();
                     installed = true;
-                    state('Installed. Restart the game, then Load a game.');
+                    state('Installed. Restart the game, then open Load Game menu.');
                     return report;
                 } finally {
                     fs.dispose();

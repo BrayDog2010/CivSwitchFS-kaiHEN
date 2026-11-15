@@ -121,7 +121,7 @@ export async function buildPersistentImage(options = {}) {
             exclusive:function(task){return task();},
             status:function(state){
                 if(state.busy && state.message.indexOf('Failure:') !== 0 &&
-                    state.message !== 'Installed. Restart the game, then Load a game.' &&
+                    state.message !== 'Installed. Restart the game, then open Load Game menu.' &&
                     state.message !== __cfsPersistMessage){
                     __cfsPersistMessage = state.message;
                     log(state.message);
