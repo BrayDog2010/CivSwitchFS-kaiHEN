@@ -42,6 +42,33 @@ payload automatically, without a computer or network connection.
 
 The installer does not back up the old save. 
 
+### Persist the whole kaiHEN chain
+
+```sh
+npm run persist:chain -- <console-ip>
+```
+
+Installs a persistent image that runs the promotion and the kaiHEN chain
+back to back. Every launch of the game from that save attempts the full
+sequence by itself and, when the promotion wins, ends with kaiHEN
+running — no computer attached. When the screen shows
+`HEN IS RUNNING`, close the game normally and hold R while opening
+another game.
+
+The SD card must already carry the kaiHEN files: run the kaiHEN launcher
+once while attached to a computer, or copy `/kaihen/bin`,
+`/hbmenu.nro` and `/switch/ounceshell.nro` to the card by hand.
+
+The same failure modes as the wired flow apply. The promotion is a race:
+if it loses, close and reopen the game to retry. The layout stage can
+crash the game: reopen it. And **one launch is allowed per console
+boot**: after a run that reached `launch complete` (success or not),
+power-cycle the console before opening the game again. Reopening Civ 7
+on the same boot re-runs the exploit and can freeze the console.
+
+`npm run persist:install -- <console-ip>` reinstalls the promotion-only
+image and takes the chain back out of the save.
+
 ### Launch the exploit
 
 If you are not going for persistence, just start the CivSwitch Remote JS Loader
