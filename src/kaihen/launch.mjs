@@ -15,7 +15,7 @@ import {prepareGatedWorker, releaseGatedWorker, workerFinished,
 import {pmIpcU64} from "./pm.mjs";
 
 // Walk one domain's entry list in the table (reference launch.entries).
-async function domainEntries(context, domain) {
+export async function domainEntries(context, domain) {
     const layout = context.layout;
     const sentinel = domain + 0x20;
     const rows = [];

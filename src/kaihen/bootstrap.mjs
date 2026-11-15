@@ -13,6 +13,7 @@ import {sendContext} from "./wire-context.mjs";
 import {readFs, writeFs, writeFsUnverified, armEndpoint} from "./endpoint.mjs";
 import {cancelApiWorkers} from "./workers.mjs";
 import {exportHandle} from "./objects.mjs";
+import {domainEntries} from "./launch.mjs";
 import {sdReadFile, openSdCard, sdGetEntryType, sdWriteFile}
     from "./sdcard.mjs";
 
@@ -142,6 +143,7 @@ export async function runBootstrap(context, options = {}) {
         // window 150/150 on WiFi where docked/Ethernet runs idle at once.
         let idle = false, last = -1, busy = 0;
         const gateStart = Date.now();
+        let tablePrev = null;
         for (let attempt = 0; attempt < 240 && !idle; attempt++) {
             const reply = cmifSend(context.loaderCopy.handle,
                 {pkt: slots.pkt, cmd: 0, input: gateInput,
@@ -253,6 +255,42 @@ export async function runBootstrap(context, options = {}) {
                         await khLog("BS-unwedge2 failed: " +
                             (unwedgeError && unwedgeError.message ?
                                 unwedgeError.message : unwedgeError));
+                    }
+                }
+                if (busy === 5 || busy === 45) {
+                    // Domain-table churn snapshot: the drain logs' open/close
+                    // cycles (open 151 -> close 151 -> open 151) suggest the
+                    // loader RETRY-CYCLES the npdm open on the swapped CodeFS
+                    // (each attempt serviced, failing, re-issued) rather than
+                    // one request sitting wedged. Churn between snapshots =
+                    // retry loop; a frozen table = true wedge.
+                    try {
+                        const entries = await domainEntries(context,
+                            context.loaderRoot.domain);
+                        const map = {};
+                        for (const entry of entries) map[entry.id] = entry.object;
+                        const ids = Object.keys(map).map(Number).sort((a, b) => a - b);
+                        await khLog("BS-table n=" + ids.length + " ids=" +
+                            ids.slice(0, 24).join(",") +
+                            (ids.length > 24 ? ",…" : ""));
+                        if (tablePrev) {
+                            const added = ids.filter(id => !(id in tablePrev));
+                            const removed = Object.keys(tablePrev)
+                                .map(Number).filter(id => !(id in map));
+                            const moved = ids.filter(id => id in tablePrev &&
+                                tablePrev[id] !== map[id]);
+                            await khLog("BS-table verdict: " +
+                                (added.length || removed.length || moved.length ?
+                                    "CHURNED (retry loop) +" : "FROZEN (true wedge)") +
+                                (added.length ? " added=" + added.join(",") : "") +
+                                (removed.length ? " removed=" + removed.join(",") : "") +
+                                (moved.length ? " moved=" + moved.join(",") : ""));
+                        }
+                        tablePrev = map;
+                    } catch (tableError) {
+                        await khLog("BS-table snapshot failed: " +
+                            (tableError && tableError.message ?
+                                tableError.message : tableError));
                     }
                 }
                 if (idle) break;  // drained by the unwedge — run the NRO now

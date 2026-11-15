@@ -37,6 +37,8 @@ function usage(code) {
   --force          restage files even when their size already matches
   --no-hbmenu      skip hbmenu.nro
   --no-programs    skip programs/
+  --no-stage       skip the SD status probe and staging entirely (files
+                   must already be on the card)
   --probes         also run the TS/SR/SB diagnostics (off by default: their
                    doomed code-opens wedge the shared loader session with a
                    request that never completes — every later dispatch,
@@ -72,6 +74,7 @@ function parse(args) {
         else if (arg === "--dx") options.runDx = true;
         else if (arg === "--no-hbmenu") options.hbmenu = false;
         else if (arg === "--no-programs") options.programs = false;
+        else if (arg === "--no-stage") options.noStage = true;
         else if (!options.console && /^\d+\.\d+\.\d+\.\d+$/.test(arg))
             options.console = arg;
         else usage(1);
@@ -221,6 +224,12 @@ async function main() {
     console.log(`-- kaihen payload: ${built.bytes} bytes --`);
     await send(options.console, port,
         `(globalThis.__KH_MODE='status');${manifestSource}`, "manifest");
+    if (options.noStage) {
+        // Skip the SD status probe and any staging entirely: files must
+        // already be on the card; the bootstrap stage's own presence
+        // checks are the last-line guard.
+        console.log("-- staging skipped (--no-stage) --");
+    } else {
     const status = await send(options.console, port, built.payload, "status");
     if (/KH: NO SESSION/.test(status))
         throw Error("No promoted CivSwitchFS session; run the main payload first.");
@@ -278,6 +287,7 @@ async function main() {
                 console.log(`-- staged ${file.name} --`);
             }
         }
+    }
     }
 
     if (options.statusOnly) return;
