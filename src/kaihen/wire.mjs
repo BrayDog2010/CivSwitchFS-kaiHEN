@@ -55,12 +55,12 @@ export function buildCmif(pkt, options) {
             BigInt(Number(address & 0xffffffffn)));
         // Attribute parity with the recorded SDK traffic: send buffers
         // attr 0, receive buffers attr 1 (NonSecureIpc). Empirical matrix
-        // (runs 74-79): WithContext reads attr 0 -> server kill, attr 3 ->
-        // server kill, attr 1 -> works (byte-for-byte the recording's read
-        // buffer encoding); plain-protocol reads attr 3 -> server kill (run79
-        // ro/main). The old note about a mode-1 B descriptor rejected with
-        0xE801 by the bare svc-0x22 wrapper (run51) was that run's copy
-        combination, not the attribute — the SDK itself sends attr 1.
+        // (runs 74-79): WithContext reads with attr 0 or attr 3 get the
+        // session killed; attr 1 works byte-for-byte like the recording's
+        // read buffer. Plain-protocol reads with attr 3 also die (run79,
+        // ro/main). The old note about mode 1 rejected with kernel 0xE801
+        // by the bare svc-0x22 wrapper (run51) was that run's copy
+        // combination, not the attribute — the SDK itself sends attr 1.
         const mode = aList.includes(descriptor) ? 0n : 1n;
         const word2 = (mode | ((address >> 36n) & 7n) << 2n |
             ((size >> 32n) & 0xfn) << 24n |
