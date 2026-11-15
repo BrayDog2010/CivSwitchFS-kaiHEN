@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepsipu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart:
 
-This is payload provides **access to FS privileges** through an elevated fsp-srv handle. It runs inside the **CivSwitch Remote JS Loader**. That elevated session is exposed as `globalThis.fspSrv` for the next payloads. **IT'S ALSO TARGETTING DEVS**, *I'm sorry but other people probably won't know what to do with this !*. Also **it does not go to the RO stage**, yet.
+This is payload provides **access to FS privileges** through an elevated fsp-srv handle. It runs inside the **CivSwitch Remote JS Loader**. That elevated session is exposed as `globalThis.fspSrv` for the next payloads. **IT'S ALSO TARGETTING DEVS**, *I'm sorry but other people probably won't know what to do with this !*. The FS access can be chained into a full **kaiHEN boot** (homebrew enabler) — see [Booting kaiHEN](#booting-kaihen-homebrew-enabler).
 
 CivSwitchFS is **semi-untethered**, RPC was fully removed :tada:
 
@@ -85,6 +85,82 @@ the `globalThis.fspSrv` handle to perform filesystem operations.
 
 An example can be found in `examples/user-storage`.
 
+## Booting kaiHEN (homebrew enabler)
+
+`tools/kaihen.mjs` chains the FS access into a full [kaiHEN](https://github.com/ouncebrew/kaihen)
+boot. Once kaiHEN runs, holding R while opening a game starts hbmenu
+instead of the game. kaiHEN normally starts from SmileBASIC (a Switch
+game with a built-in BASIC interpreter); this chain starts it from
+Civilization VII. Tested with the **20261114c** release
+on firmware 23.0.1, both docked (Ethernet) and undocked (WiFi).
+
+On top of the usual setup you need:
+
+- the kaiHEN release unpacked on your computer
+- an SD card in the console: the first run copies hbmenu, the game loader
+  and the HEN programs to it, later runs can pass `--no-stage`
+
+Run the exploit first, wait for the success line, then the launcher:
+
+```sh
+npm run send -- <console-ip>      # wait for "You just Civ Sevened"
+node tools/kaihen.mjs <console-ip> --dir /path/to/kaiHEN-20261114c
+```
+
+A successful run ends with:
+
+```
+KH: === HEN IS RUNNING ===
+-- kaiHEN is running. Close Civilization VII normally; hold R while opening a native game. --
+```
+
+Then close Civ 7 normally (don't power off), hold R while opening another
+game. The first R-held launch only records the game's signing policy and
+the game starts as usual; the next R-held launch opens hbmenu. kaiHEN
+keeps running until the console restarts.
+
+The launcher stages the SD card, then runs the chain: it re-arms the
+endpoint (the fs write path), reads the domain layout, copies the game's
+loader fs session, builds a donor (a stand-in code filesystem), performs
+the launch (the game's code filesystem is exchanged for kaiHEN's), and
+finally runs the bootstrap NRO, which talks to that loader session copy
+to start the HEN. Everything it prints goes to stdout; tee it if you
+want to keep it.
+
+| Option | Effect |
+|---|---|
+| `--dir DIR` | kaiHEN release folder (default `../../kaiHEN-20261114c` from the repo root) |
+| `--status-only` | report SD state and exit |
+| `--force` | restage files even when their size already matches |
+| `--no-hbmenu`, `--no-programs` | skip staging those files |
+| `--no-stage` | skip the SD probe and staging entirely (files must already be on the card) |
+| `--probes`, `--dx` | also run the debug diagnostics (TS/SR/SB probes / DX experiments; default skip list is `dx,probes`) — their sends close the loader session copy the bootstrap needs |
+| `--skip A,B` | explicit skip list, overrides the default `dx,probes` |
+
+### When it fails
+
+- The promotion (`npm run send`, the race that wins the elevated fs
+  session) loses about 1 attempt in 3: `Canary did not flip` means the
+  attempt didn't take. Restart the game and retry. If it loses three
+  times in a row, power-cycle the console.
+- The layout stage crashes the game without any error output about half
+  the time: the log just stops after `DL5` or `FR0` (layout-stage
+  markers). Restart the game and retry; nothing launched yet, so the
+  boot is still usable.
+- One chain launch per console boot. After a run that reached
+  `launch complete`, power-cycle before trying again; the launcher
+  refuses a second launch on the same boot.
+- Nothing may touch the loader session copy between its creation and the
+  bootstrap's first request on it. fs closes a session when a request
+  errors before its handler, and everything sent to a closed session
+  fails with kernel `0xF601` (SessionClosed). That is the whole reason
+  the debug diagnostics are opt-in.
+
+kaiHEN is by [kurumuz](https://github.com/kurumuz). The chain is a port
+of the reference implementation built on
+[civ7-fs](https://github.com/HerXayah/civ7-fs) and
+[CivSwitch](https://github.com/Gezine/CivSwitch).
+
 ## Notes
 
 - The auto timing calibration is not perfect yet, some freezes can happen
@@ -98,9 +174,11 @@ An example can be found in `examples/user-storage`.
 src/core.js          # payload entry point and flow
 src/core/            # steps, memory access, and FS communication
 src/core/config.mjs  # the whole exploit conf, tweak it if you want
+src/kaihen/          # kaiHEN chain stages (endpoint, layout, loader copy, donor, launch, bootstrap)
 examples/            # small payload usage examples
 persist/             # persistence builder inputs, save codec, writer, and installer
 tools/               # well, tools
+tools/kaihen.mjs     # kaiHEN launcher: SD staging + the chain, see "Booting kaiHEN"
 ```
 
 ## License

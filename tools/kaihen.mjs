@@ -40,10 +40,11 @@ function usage(code) {
   --no-stage       skip the SD status probe and staging entirely (files
                    must already be on the card)
   --probes         also run the TS/SR/SB diagnostics (off by default: their
-                   doomed code-opens wedge the shared loader session with a
-                   request that never completes — every later dispatch,
-                   including the bootstrap's op-16, returns kernel Busy
-                   0xF601; runs 140-141)
+                   doomed code-opens close the shared loader session copy —
+                   fs closes a session when a request errors before its
+                   handler, and every later dispatch, including the
+                   bootstrap's op-16, fails with kernel 0xF601
+                   SessionClosed; runs 140-141)
   --dx             also run the DX experiments (off by default: DX19 swaps
                    loaderCopy for a promoted-session copy that is only ever
                    cmd-810-probed, never cmd-0)
