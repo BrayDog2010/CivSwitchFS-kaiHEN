@@ -63,8 +63,11 @@ function queryMemory(address) {
 // LoadNRO (cmd 0) with PID header + current-process copy; returns destination.
 function loadNro(context, source, bytesLength, bss, bssSize) {
     const slots = arenaSlots(context);
+    // Cmd 0 carries NO handle copies — only Initialize (cmd 4) passes the
+    // current-process copy. An extra copy on LoadNro is rejected with
+    // 0x1759 (run106; the author's nro.cjs sends copies only on cmd 4).
     const reply = cmifSend(context.ro.handle, {
-        pkt: slots.pkt, cmd: 0, pid: true, copies: [0xffff8001],
+        pkt: slots.pkt, cmd: 0, pid: true,
         input: pidPad().concat(u64Bytes(BigInt(source)))
             .concat(u64Bytes(BigInt(bytesLength)))
             .concat(u64Bytes(BigInt(bss))).concat(u64Bytes(BigInt(bssSize))),
@@ -77,7 +80,7 @@ function loadNro(context, source, bytesLength, bss, bssSize) {
 function unloadNro(context, destination) {
     const slots = arenaSlots(context);
     const reply = cmifSend(context.ro.handle, {
-        pkt: slots.pkt, cmd: 1, pid: true, copies: [0xffff8001],
+        pkt: slots.pkt, cmd: 1, pid: true,
         input: pidPad().concat(u64Bytes(BigInt(destination))), rawWords: 12
     });
     requireOk(reply, "UnloadNRO");
