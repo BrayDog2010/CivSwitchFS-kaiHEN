@@ -68,18 +68,24 @@ export class Gate {
             this.waiters.map(w => hex(w)).join(",") + "] selected=[" +
             beforeSel.map(w => hex(w)).join(",") + "] row=" +
             hex(this.row.address) + ")");
+        await khLog("PK1 inspected");
         await compareWriteFs(this.context, this.row.address + 0x30,
             u64Bytes(BigInt(this.row.wait)).slice(0, 4),
             u64Bytes(BigInt(this.park)).slice(0, 4));
         this.parked = true;
+        await khLog("PK2 park word written");
         cancelApiWorkers(this.context);
+        await khLog("PK3 api workers cancelled");
         const after = await this.inspect(); // fresh ordinary FS request after cancellation
+        await khLog("PK4 reinspected");
         check(after.state === 1 && this.waiters.includes(after.parent),
             "parked session did not rearm");
         // Native FS has separate wait queues. A null-selected cancellation
         // retries the same kernel wait array. Select the idle session once to
         // rebuild it.
+        await khLog("PK5 stepping empty");
         await this.step({empty: true});
+        await khLog("PK6 empty step done");
         return after;
     }
 
