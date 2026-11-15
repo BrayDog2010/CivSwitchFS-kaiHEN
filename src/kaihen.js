@@ -167,12 +167,14 @@ export async function run() {
     }
 
     const context = createContext();
-    // One launch per boot: after a completed run the HEN process owns the
-    // console state (original RO terminated, loader mount swapped) and a
-    // second launch re-does it against consumed state. Fail fast with the
-    // fix instead of dying somewhere deep in the bootstrap.
-    if (stageRecord("complete")) {
-        await khLog("this boot already completed a kaiHEN launch — " +
+    // One launch per boot: the launch stage's RO-frontend swap consumes the
+    // boot even when a later stage fails (mount swapped, original RO gone),
+    // and any session wedged by that run stays wedged — a re-run gets fresh
+    // handles pointing at the same dead shared objects (run142: busy 150/150
+    // again on a boot whose previous run had wedged the loader session).
+    // Refuse any second attempt after a launch; the fix is a power-cycle.
+    if (stageRecord("launch") || stageRecord("complete")) {
+        await khLog("this boot already ran a kaiHEN launch attempt — " +
             "power-cycle the console before running again");
         check(false, "one launch per boot: power-cycle first");
     }
