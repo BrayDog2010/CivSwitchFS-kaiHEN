@@ -4,8 +4,8 @@
 // adapter with the donor save filesystem so PM launches our image.
 
 import runtime from "../core/runtime.mjs";
-import {check, khLog, hex, u64Bytes, readU64LE, readU32LE, arenaAlloc,
-    bytesEqual, RO_TITLE} from "./state.mjs";
+import {check, khLog, hex, u64Bytes, readU64LE, readU32LE, readNative,
+    arenaAlloc, bytesEqual, RO_TITLE} from "./state.mjs";
 import {readFs, writeFs, compareWriteFs, fsPointer, fsU64} from "./endpoint.mjs";
 import {cmifSend, buildCmif, requireOk} from "./wire.mjs";
 import {exportHandle} from "./objects.mjs";
