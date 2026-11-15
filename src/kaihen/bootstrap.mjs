@@ -14,6 +14,7 @@ import {readFs, writeFs, writeFsUnverified, armEndpoint} from "./endpoint.mjs";
 import {cancelApiWorkers} from "./workers.mjs";
 import {exportHandle} from "./objects.mjs";
 import {domainEntries} from "./launch.mjs";
+import {instantSendProbe} from "./instant-send.mjs";
 import {sdReadFile, openSdCard, sdGetEntryType, sdWriteFile}
     from "./sdcard.mjs";
 
@@ -291,6 +292,25 @@ export async function runBootstrap(context, options = {}) {
                         await khLog("BS-table snapshot failed: " +
                             (tableError && tableError.message ?
                                 tableError.message : tableError));
+                    }
+                }
+                if (busy === 12) {
+                    // Dead-id reoccupy (run154: the wedged request routes to
+                    // domain id 150, which the teardown REMOVED — BS-table
+                    // n=1 ids=9, FROZEN — and fs never replies requests to
+                    // dead ids). The IS domain code-open CREATES a domain
+                    // entry; with 150 freed, the allocator may reuse the
+                    // slot. If the new entry lands at 150 pointing at a real
+                    // CodeFS, the dead-id dispatch resolves and the wedge
+                    // drains. IS1/IS2/IS3 lines reveal the added id.
+                    try {
+                        await khLog("BS-reoccupy: domain code-open to reseed " +
+                            "the freed slot");
+                        await instantSendProbe(context, RO_TITLE);
+                    } catch (reoccupyError) {
+                        await khLog("BS-reoccupy failed: " +
+                            (reoccupyError && reoccupyError.message ?
+                                reoccupyError.message : reoccupyError));
                     }
                 }
                 if (idle) break;  // drained by the unwedge — run the NRO now
