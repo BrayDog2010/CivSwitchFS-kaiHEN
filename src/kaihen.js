@@ -513,7 +513,7 @@ export async function run() {
 
         await khLog("=== HEN IS RUNNING ===");
         await khLog("Close Civilization VII normally; hold R while opening " +
-            "a native game.");
+            "a Switch 2 game.");
         stageDone("complete", {ok: true});
     } catch (error) {
         await khLog("FAILED at stage '" +

@@ -138,7 +138,7 @@ A successful run ends with:
 
 ```
 KH: === HEN IS RUNNING ===
--- kaiHEN is running. Close Civilization VII normally; hold R while opening a native game. --
+-- kaiHEN is running. Close Civilization VII normally; hold R while opening a Switch 2 game. --
 ```
 
 Then close Civ 7 normally (don't power off), hold R while opening another
