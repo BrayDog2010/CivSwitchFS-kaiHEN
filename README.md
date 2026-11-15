@@ -11,7 +11,8 @@ CivSwitchFS is **semi-untethered**, RPC was fully removed :tada: ! It should als
 
 **It's intended for devs**, as all I give is a god `fsp-srv` handle (full FS) for you to play with. The rest is for you to figure out.
 
-> [!NOTE] If you are looking for a **reliable KaiHEN access**, this [fork](https://github.com/s8n/CivSwitchFS/tree/slop) from [@Ave](https://github.com/aveao) will get you there in no time.
+> [!NOTE] 
+> If you are looking for a **reliable KaiHEN access**, this [fork](https://github.com/s8n/CivSwitchFS/tree/slop) from [@Ave](https://github.com/aveao) will get you there in no time.
 
 ### Tested configuration
 
