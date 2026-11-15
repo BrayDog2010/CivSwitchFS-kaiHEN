@@ -29,8 +29,9 @@ Beware that fs vuln can be risky to utilize and may corrupt things like your sav
 ## Requirements
 
 - Node.js **20 or later** and npm
-- A Switch 2 with the CivSwitch Remote JS Loader already running and reachable
-  on the local network when installing persistence or sending a payload
+- A Switch 2 with the CivSwitch Remote JS Loader already running and reachable on the local network when installing persistence or sending a payload
+- A microSD card, formatted fat32 or exfat (can be non-express, press home on micronag)
+- A Switch 2 game, physical or digital, can be a demo. If you're not sure: The bottom right animation on startup should be a switch 2 one.
 
 ## Usage
 
@@ -42,21 +43,41 @@ npm install
 
 ### Persist the whole kaiHEN chain (recommended)
 
-```sh
-npm run persist:chain -- <console-ip>
-```
+0. Set up your save file with CivSwitch. You may need to go to Data Management
+   to delete your save file and reinstall it occasionally. [This esp32 LDN
+   approach](https://github.com/SeanHeuc/CivSwitch/tree/main/esp32-ldn-civ7)
+   is highly recommended.
+1. Download a version of kaiHEN for SD card use (e.g. from [here](https://github.com/s8n/CivSwitchFS-kaiHEN/releases/)),
+   extract it on your SD card, and then insert your microSD card **before** you start.
+2. Set up a network connection that won't get you Nintendo server access.
+   Be very careful with this. If you don't know how to do this right,
+   DO NOT USE THIS YET. It's not worth the risk of getting the blacklist
+   update that'll lock you out of Civ 7 without a reboot. If you will set up
+   90DNS, follow the [instructions on Gitlab](https://a.gitlab.io/90dns/)
+   precisely, do not skip any steps.
+3. Boot into CivSwitch console by going to Civ 7 -> Load Game.
+   Wait for `Awaiting payload`.
+4. From this repository's folder, run the launcher with your console's IP
+   address:
 
-Installs a persistent image that runs the promotion and the kaiHEN chain
-back to back. Every launch of the game from that save attempts the full
-sequence by itself and, when the promotion wins, ends with kaiHEN
-running, with no computer attached. When the screen shows
-`HEN IS RUNNING`, close the game normally and hold R while opening a
-Switch 2 game twice.
+   ```sh
+   npm run persist:chain -- <console-ip>
+   ```
 
-The SD card must already carry the kaiHEN files. Either run the kaiHEN
-launcher once while attached to a computer (it stages them through the
-exploit), or copy them by hand: power the console off, put the card in
-a computer, and place the release files like this:
+5. Wait for about a minute while the save file is set up.
+6. Close Civilization VII normally. All subsequent starts of Civ 7 will automatically acquire FS then run kaiHEN.
+7. After finishing the CivSwitchFS-kaiHEN runs, hold R while opening a switch 2 game.
+   The first time, HEN only records the game's signing policy and the game starts
+   as usual. The next R-held launch opens hbmenu.
+8. HEN lasts until the console restarts. To use homebrew again after a restart, go into Civ7 and hit load again.
+
+**Tip:** You can go to Civ 7 settings -> Console to disable opening movies.
+
+#### For advanced users: Manually structuring SD card files
+
+Currently the official kaiHEN distribution has a different file layout than it expects on zip.
+
+The copy in this repo's releases is going to match the SD format, but if you want to make your own, e.g. to run a later version, structure it like so:
 
 | kaiHEN release file | SD card path |
 |---|---|
@@ -65,25 +86,10 @@ a computer, and place the release files like this:
 | `hen/main` | `/kaihen/bin/hen/main` |
 | `game/main` | `/kaihen/bin/game/main` |
 | `hbmenu.nro` | `/hbmenu.nro` |
-| `programs/ounceshell.nro` | `/switch/ounceshell.nro` |
-
-The last two are optional: the HEN chain runs without them, but holding
-R opens `hbmenu.nro`, so leave it out only if you don't need the
-homebrew menu. Missing optional files log a warning; a missing
-chain-critical file refuses before the boot is consumed.
+| `programs/ounceshell.nro` | `/switch/ounceshell/ounceshell.nro` |
 
 If a file is missing, the chain refuses right after the promotion with
 `SD files missing: …` instead of wasting the boot.
-
-`npm run persist:install -- <console-ip>` reinstalls the promotion-only
-image and takes the kaiHEN chain back out of the save.
-
-Both installers build the payload with readable names by default. For
-crash debugging, `--debug-payload` skips all minification (promotion-only
-image — the fully unminified chain exceeds the loader's 500 KB payload
-limit). `--minify-payload` produces the smaller minified image, which
-currently fails to eval in the save path (`Unexpected identifier`) —
-don't use it until that is fixed.
 
 ### Launch CivSwitchFS by itself (not for end users)
 
