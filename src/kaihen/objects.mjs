@@ -9,6 +9,7 @@ import {readFs, writeFs, compareWriteFs, fsPointer, fsU32, fsU64} from "./endpoi
 import {cmifSend, requireOk, oneMovedHandle, buildCmif, bareSendTransport}
     from "./wire.mjs";
 import {arenaSlots} from "./state.mjs";
+import {openService} from "./ro.mjs";
 
 const {openDomainSession, closeHandle} = runtime;
 
@@ -89,7 +90,7 @@ export async function openNotifier(context) {
     // NOT be re-initialized; doing so corrupted the shared session state
     // and the notifier open failed on the next two boots with 0xBC320002/
     // 0xEEB20002).
-    const dedicated = runtime.openService("fsp-srv");
+    const dedicated = openService("fsp-srv");
     check(dedicated > 0, "dedicated fsp-srv open failed");
     track(context, dedicated, "fsp-dedicated");
     const dSlots = arenaSlots(context);

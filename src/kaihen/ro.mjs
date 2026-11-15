@@ -13,7 +13,7 @@ const {allocPage, call_rop, closeHandle} = runtime;
 // sdk-functions.json: nn::sm GetService wrapper (out, name, len).
 const SM_GET_SERVICE = 0x14cc90;
 
-function openService(name) {
+export function openService(name) {
     const nameBuf = allocPage(16);
     runtime.writeStr(nameBuf, name);
     const out = allocPage(16);
