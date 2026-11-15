@@ -9,7 +9,7 @@ CivSwitchFS is **semi-untethered**, RPC was fully removed :tada:
 
 Smol demo of CivSwitchFS: https://streamable.com/bhgobg
 
-Smol demo of CivSwitchFS booting KaiHEN: https://youtu.be/2pGN9HiXaZg
+Smol demo of CivSwitchFS booting KaiHEN: https://youtu.be/2pGN9HiXaZg (skip from 0:40 to 4:00)
 
 ## Repo state
 
@@ -68,7 +68,7 @@ npm install
 6. Close Civilization VII normally. All subsequent starts of Civ 7 will automatically acquire FS then run kaiHEN.
 7. After finishing the CivSwitchFS-kaiHEN runs, hold R while opening a switch 2 game.
    The first time, HEN only records the game's signing policy and the game starts
-   as usual. The next R-held launch opens hbmenu.
+   as usual. The next R-held launch opens hbmenu. If it doesn't work, restart your system and run Civ7 to try again.
 8. HEN lasts until the console restarts. To use homebrew again after a restart, go into Civ7 and hit load again.
 
 **Tip:** You can go to Civ 7 settings -> Console to disable opening movies.

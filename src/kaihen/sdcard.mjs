@@ -251,3 +251,77 @@ export function stageFinish(context, name) {
     delete staging[name];
     return {ok: true, size: entry.size};
 }
+
+// -- Release relocation -------------------------------------------------------
+// Someone extracted the kaiHEN release zip straight onto the SD card root
+// (/kaiHEN-20261114d/...). The expected layout is /kaihen/bin/*, /hbmenu.nro
+// and /switch/ounceshell.nro — move the files into place with the
+// IFileSystem rename commands (5 RenameFile, 6 RenameDirectory) instead of
+// asking the user to shuffle folders by hand.
+
+const RELEASE_SOURCES = {
+    "bootstrap": {source: "bootstrap.bin", directory: false},
+    "ro": {source: "ro", directory: true},
+    "hen": {source: "hen", directory: true},
+    "game": {source: "game", directory: true},
+    "hbmenu": {source: "hbmenu.nro", directory: false},
+    "programs": {source: "programs/ounceshell.nro", directory: false}
+};
+
+function sdRenamePath(context, sd, from, to, directory) {
+    const slots = arenaSlots(context);
+    writeStr(slots.path, from);
+    writeStr(slots.info, to);
+    const reply = cmifSend(sd, {pkt: slots.pkt,
+        cmd: directory ? 6 : 5,
+        x: [{addr: slots.path, size: 769}, {addr: slots.info, size: 769}],
+        input: [], rawWords: 8});
+    requireOk(reply, "rename " + from + " -> " + to);
+    sdCommit(context, sd);
+    return true;
+}
+
+// Move every manifest file in `missing` from a detected release folder at
+// the SD root into its expected place. Returns the manifest names moved.
+export async function relocateSdRelease(context, missing) {
+    const manifest = globalThis.__KH_MANIFEST || {};
+    const wanted = missing.filter(name => manifest[name] && RELEASE_SOURCES[name]);
+    if (!wanted.length) return [];
+    const sd = openSdCard(context);
+    const list = runtime.ipcListDirectory(sd, "/", 3);
+    check(list.error === 0, "SD root listing failed: " + list.error);
+    // Candidate: a root entry named kaiHEN* (any case) that is not our own
+    // lowercase /kaihen target and holds bootstrap.bin at its root.
+    const candidates = list.entries.filter(entry =>
+        entry.type === 0 && /^kaihen/i.test(entry.name) &&
+        entry.name.toLowerCase() !== "kaihen");
+    for (const candidate of candidates) {
+        const root = "/" + candidate.name;
+        const probe = sdGetEntryType(context, sd, root + "/bootstrap.bin");
+        if (!(probe.transport === 0 && probe.result === 0)) continue;
+        const moved = [];
+        for (const name of wanted) {
+            const item = RELEASE_SOURCES[name];
+            const from = root + "/" + item.source;
+            const to = manifest[name].path;
+            const source = sdGetEntryType(context, sd, from);
+            if (!(source.transport === 0 && source.result === 0)) continue;
+            const target = sdGetEntryType(context, sd, to);
+            if (target.transport === 0 && target.result === 0) continue;
+            try {
+                ensureSdDirectories(context, sd, to);
+                sdRenamePath(context, sd, from, to, item.directory);
+                moved.push(name);
+            } catch (error) {
+                await khLog("SD relocate " + name + " failed: " +
+                    (error && error.message ? error.message : error));
+            }
+        }
+        if (moved.length) {
+            await khLog("SD: relocated " + moved.join(", ") +
+                " from " + root + " (extracted release folder)");
+            return moved;
+        }
+    }
+    return [];
+}

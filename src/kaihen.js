@@ -37,7 +37,7 @@ import {connectRoFrontend} from "./kaihen/ro.mjs";
 import {runBootstrap} from "./kaihen/bootstrap.mjs";
 import {openSdCard, sdGetEntryType, sdReadFile, sdWriteFile, sdOpenFile,
     sdFileSize, ensureSdDirectories, removeSdFile, createSdFile,
-    sdWriteFileChunk, sdCommit} from "./kaihen/sdcard.mjs";
+    sdWriteFileChunk, sdCommit, relocateSdRelease} from "./kaihen/sdcard.mjs";
 import {RO_TITLE, readU64LE, arenaAlloc, track, u64Bytes, bytesToHex}
     from "./kaihen/state.mjs";
 import {buildCmif, bareSendTransport, cmifSend} from "./kaihen/wire.mjs";
@@ -187,7 +187,13 @@ export async function run() {
     if (globalThis.__KH_MANIFEST) {
         const optional = name => Boolean(globalThis.__KH_MANIFEST[name] &&
             globalThis.__KH_MANIFEST[name].optional);
-        const missing = await verifySdFiles(context);
+        let missing = await verifySdFiles(context);
+        if (missing.length) {
+            // Self-heal: if the kaiHEN release was extracted straight onto
+            // the card, move the files into place before failing.
+            const moved = await relocateSdRelease(context, missing);
+            if (moved.length) missing = await verifySdFiles(context);
+        }
         const requiredMissing = missing.filter(name => !optional(name));
         if (requiredMissing.length) {
             await khLog("required SD files missing: " +
