@@ -432,6 +432,14 @@ export async function run() {
                 "owned domain server readiness");
             const gate = new Gate(context, row, copy.handle, context.gateEvent);
             try {
+                // GTA controlled experiment: park WITHOUT the worker thread
+                // first. If this passes and the worker flow below hangs, the
+                // park machinery is fine and the worker's runtime (gate-wait
+                // spinning on the eval core) is the interference.
+                await gate.parkSession();
+                await khLog("GTA parked alone");
+                await gate.restore();
+                await khLog("GTA restored");
                 const packets = [0, 1].map(index => {
                     const pkt = arenaAlloc(context, 0x1000,
                         "gate-test-" + index);
