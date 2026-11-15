@@ -229,9 +229,19 @@ export async function run() {
             // State-diff dump in the author engine's proof schema, before any
             // other send on the copied handle (reference runs/switch2-5T5Brx).
             await dumpChainState(context);
-            await threadSendProbe(context, RO_TITLE);
-            await spinReadProbe(context, RO_TITLE);
-            await sessionBlockProbe(context, RO_TITLE);
+            // The TS/SR/SB diagnostics each copy the root and send a doomed
+            // plain code-open (by design — they watch the death). The author's
+            // flow NEVER sent a doomed request: copy -> code-open 4s later ->
+            // launch -> bootstrap all lived. Skippable via --skip probes.
+            const skipProbes = Array.isArray(globalThis.__KH_SKIP) &&
+                globalThis.__KH_SKIP.includes("probes");
+            if (skipProbes) {
+                await khLog("TS/SR/SB probes skipped (--skip probes)");
+            } else {
+                await threadSendProbe(context, RO_TITLE);
+                await spinReadProbe(context, RO_TITLE);
+                await sessionBlockProbe(context, RO_TITLE);
+            }
             if (Array.isArray(globalThis.__KH_SKIP) &&
                     globalThis.__KH_SKIP.includes("dx")) {
                 await khLog("DX experiments skipped (--skip dx)");
