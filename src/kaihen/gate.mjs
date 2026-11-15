@@ -259,8 +259,13 @@ export async function prepareGateEvent(context) {
         "native SystemEvent layout changed");
     const copy = await exportHandle(context, readU32LE(b, 8),
         "owned notifier writable event");
-    const event = {sourceHandle: notifier.handle,
+    const event = {sourceHandle: notifier.eventHandle,
         read: notifier.readEvent, write: copy.handle};
+    // sourceHandle must be the FS-SIDE SystemEvent handle (backend+0x24 —
+    // the author's prepare-event.cjs parks on notifier.handle = that field).
+    // Parking on the client session handle (a value in OUR process's table)
+    // makes the fs server's waiter re-arm on an invalid handle and wedges
+    // every fs session — runs 90-100 hung in the park write exactly so.
     // Signal/clear qualification through the syscall stubs; this also swaps
     // the scanned offsets if the first assignment is backwards.
     qualifyEventStubs(context, event);
