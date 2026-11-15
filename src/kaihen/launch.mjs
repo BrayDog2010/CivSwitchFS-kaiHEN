@@ -181,28 +181,34 @@ export async function launchRoFrontend(context, options = {}) {
     } finally {
         proof.outstanding = gate.outstanding ? true : false;
         // Drain requests still QUEUED at the boundary while still parked.
-        // Runs 147/148 photographed the alternative: a request queued at
-        // the restore (the loader's read-through-CodeFS on the swapped
-        // object — cmd 0 WithContext -> object 148, payload carrying the
-        // 1264-byte npdm size) gets RECEIVED into the row buffer but never
-        // dispatched — the restore's wait teardown races the selection —
-        // and the shared session then carries a permanent kernel Busy.
-        // Stepping while parked dispatches and replies each one (the same
-        // rhythm steps 0..8 used); only when the queue is quiet do we
-        // restore.
+        // Runs 147/148/149 photographed the alternative: the loader reads
+        // the launched process's code THROUGH the swapped CodeFS (cmd 8
+        // read chunks + the cmd-0 npdm open, payload 0x4F0 = 1264) in a
+        // burst that starts at the exchange — a request from it queued at
+        // the restore gets RECEIVED into the row buffer but never
+        // dispatched, leaving the shared session permanently Busy. Run149
+        // proved the drain works but an 8-step cap restores mid-burst and
+        // request #9 wedges exactly the same. Drain until pending() is
+        // genuinely quiet (the burst is ~10-30 chunks; 200 is headroom),
+        // then restore.
         proof.drained = [];
-        for (let drain = 0; drain < 8; drain++) {
+        for (let drain = 0; drain < 200; drain++) {
             let queued = false;
             try { queued = await gate.pending(); }
             catch (pendingError) { break; }
-            if (!queued) break;
+            if (!queued) {
+                if (drain > 0)
+                    await khLog("launch drain quiet after " + drain);
+                break;
+            }
             try {
                 const step = await gate.step();
                 const info = requestInfo(step.request);
                 proof.drained.push({index: drain, ...info});
-                await khLog("launch drain " + drain + ": " + info.kind +
-                    (info.command !== undefined ? " cmd=" + info.command : "") +
-                    " object=" + info.object);
+                if (drain < 8 || (drain & 15) === 0)
+                    await khLog("launch drain " + drain + ": " + info.kind +
+                        (info.command !== undefined ? " cmd=" + info.command : "") +
+                        " object=" + info.object);
             } catch (stepError) {
                 await khLog("launch drain step failed: " +
                     (stepError && stepError.message ? stepError.message : stepError));
