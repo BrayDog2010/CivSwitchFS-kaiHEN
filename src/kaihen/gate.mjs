@@ -2,7 +2,8 @@
 // fsp-srv: park the session on the notifier handle, inject one-shot requests
 // through the waiter array, and restore the session to its idle receive.
 
-import {check, khLog, hex, u64Bytes, readU64LE, readU32LE} from "./state.mjs";
+import {check, khLog, hex, u64Bytes, readU64LE, readU32LE, bytesEqual}
+    from "./state.mjs";
 import {readFs, writeFs, writeFsUnverified, compareWriteFs, fsU32, fsU64}
     from "./endpoint.mjs";
 import {waitZero, eventSignal, eventClear, qualifyEventStubs} from "./pm.mjs";
@@ -69,9 +70,19 @@ export class Gate {
             beforeSel.map(w => hex(w)).join(",") + "] row=" +
             hex(this.row.address) + ")");
         await khLog("PK1 inspected");
-        await compareWriteFs(this.context, this.row.address + 0x30,
-            u64Bytes(BigInt(this.row.wait)).slice(0, 4),
-            u64Bytes(BigInt(this.park)).slice(0, 4));
+        // Split compareWriteFs so a hang localizes to read/write/readback.
+        const parkAddr = this.row.address + 0x30;
+        const expect = u64Bytes(BigInt(this.row.wait)).slice(0, 4);
+        const replace = u64Bytes(BigInt(this.park)).slice(0, 4);
+        const beforePark = await readFs(this.context, parkAddr, 4);
+        check(bytesEqual(beforePark, expect),
+            "park word differs at " + hex(parkAddr));
+        await khLog("PK1a read park word=" + hex(Number(readU32LE(beforePark, 0))));
+        await writeFs(this.context, parkAddr, replace);
+        await khLog("PK1b park word written");
+        const afterPark = await readFs(this.context, parkAddr, 4);
+        check(bytesEqual(afterPark, replace), "park readback differs");
+        await khLog("PK1c park readback ok");
         this.parked = true;
         await khLog("PK2 park word written");
         cancelApiWorkers(this.context);
