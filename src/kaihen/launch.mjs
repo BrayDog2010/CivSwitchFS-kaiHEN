@@ -158,10 +158,18 @@ export async function launchRoFrontend(context, options = {}) {
                         proof.rolledBack = true;
                         throw error;
                     }
-                    check(await fsPointer(context, code.entry + 0x18) === BigInt(loaderDomain) &&
-                        await fsPointer(context, code.entry + 0x20) === BigInt(donor.object) &&
-                        await fsPointer(context, donor.entry + 0x18) === BigInt(donor.domain) &&
-                        await fsPointer(context, donor.entry + 0x20) === BigInt(code.object),
+                    // fsPointer returns Number; loaderDomain/donor.domain are
+                    // Numbers — BigInt() wrappers made === always false
+                    // (run101: the exchange verified fine but this check
+                    // could never pass).
+                    check(await fsPointer(context, code.entry + 0x18) ===
+                        loaderDomain &&
+                        await fsPointer(context, code.entry + 0x20) ===
+                        donor.object &&
+                        await fsPointer(context, donor.entry + 0x18) ===
+                        donor.domain &&
+                        await fsPointer(context, donor.entry + 0x20) ===
+                        code.object,
                         "owning-reference exchange did not verify");
                     proof.swapped = true;
                     proof.code = code;
