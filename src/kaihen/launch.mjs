@@ -228,6 +228,23 @@ export async function launchRoFrontend(context, options = {}) {
     check(Number(results[0]) === 0,
         "pm-launch send failed: " + hex(Number(results[0])));
 
+    // The author's launch closes the exported Loader-server-readiness
+    // handle after the worker join (launch.cjs: root-native-close-handle
+    // handle: server.handle) — before the result is even parsed. Our port
+    // leaked it on every prior run (gate-test closes its own copy; this
+    // export never was). A lingering export of the row's receive-side
+    // signal object is the standing divergence from the reference in
+    // exactly the machinery whose wake the post-restore requests need
+    // (runs 148-150: the row receives the loader's npdm re-open on the
+    // swapped CodeFS but fs never dispatches it).
+    if (context.loaderServerExport) {
+        try { runtime.closeHandle(context.loaderServerExport.handle); }
+        catch (closeError) { /* already gone */ }
+        await khLog("loader server readiness export closed " +
+            hex(context.loaderServerExport.handle));
+        context.loaderServerExport = null;
+    }
+
     // The worker's send wrote the reply back into the packet page.
     const parsed = runtime.cmifReply(pmPkt);
     check(parsed.result === 0,
