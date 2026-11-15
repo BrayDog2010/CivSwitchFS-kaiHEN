@@ -9,6 +9,7 @@ import {check, khLog, hex, readU64LE, readU32LE, readNative,
 import {buildNroImage, tryWaitAdapterBytes, runNroOnRawThread} from "./ro.mjs";
 import {bareSendTransport} from "./wire.mjs";
 import {sendContext} from "./wire-context.mjs";
+import {readFs, writeFs} from "./endpoint.mjs";
 import {sdReadFile, openSdCard} from "./sdcard.mjs";
 
 // thread-code.json (game SDK).
