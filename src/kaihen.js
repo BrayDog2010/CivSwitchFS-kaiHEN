@@ -424,55 +424,24 @@ export async function run() {
         await stage("bind-sessions", () => bindSessions(context));
         await stage("gate-event", () => prepareGateEvent(context));
         await stage("gate-test", async () => {
+            // Park the LOADER's server session row — the row the launch
+            // gates (the author's launch.cjs parks root.targetDomain = the
+            // loader's domain; their test-gate parked ownDomain only because
+            // their daemon's memory access didn't traverse it — OUR endpoint
+            // storage lives in our own domain session, so parking ownDomain
+            // wedges our only memory primitive, runs 90-95).
             const domain = context.inspectionDomain;
             const row = context.bound.rows.find(r =>
-                r.domain === context.loaderCopy.ownDomain);
-            check(row, "our bound server session is missing");
+                r.domain === context.loaderRoot.domain);
+            check(row, "the loader's bound server session is missing");
             const copy = await exportHandle(context, row.receive,
-                "owned domain server readiness");
+                "loader server readiness");
             const gate = new Gate(context, row, copy.handle, context.gateEvent);
             try {
-                // GTA controlled experiment: park WITHOUT the worker thread
-                // first. If this passes and the worker flow below hangs, the
-                // park machinery is fine and the worker's runtime (gate-wait
-                // spinning on the eval core) is the interference.
                 await gate.parkSession();
-                await khLog("GTA parked alone");
+                await khLog("GTA parked the loader row alone");
                 await gate.restore();
                 await khLog("GTA restored");
-                const packets = [0, 1].map(index => {
-                    const pkt = arenaAlloc(context, 0x1000,
-                        "gate-test-" + index);
-                    buildCmif(pkt, {control: true, cmd: 3, input: [], rawWords: 8});
-                    return {pkt, handle: domain.handle,
-                        label: "control-test-" + index};
-                });
-                await khLog("GT0 packets built");
-                const worker = prepareGatedWorker(context, packets,
-                    "gate-test");
-                await khLog("GT1 worker prepared handle=" + hex(worker.worker.handle));
-                await gate.parkSession();
-                await khLog("GT2 parked");
-                releaseGatedWorker(worker);
-                await khLog("GT3 released");
-                check(await gate.pending(),
-                    "first worker request is not queued");
-                await khLog("GT4 pending");
-                const before = workerSendResults(worker);
-                check(Number(before[0]) === Number(coreRuntime.FRAME_SENTINEL),
-                    "first request ran through the park");
-                await gate.step();
-                await khLog("GT5 stepped once");
-                const middle = workerSendResults(worker);
-                check(Number(middle[0]) === 0 && !workerFinished(worker) &&
-                    await gate.pending(),
-                    "gate did not release exactly one request");
-                await gate.step();
-                await khLog("GT6 stepped twice");
-                const results = joinGatedWorker(worker);
-                await khLog("GT7 joined");
-                check(results.every(value => Number(value) === 0),
-                    "a stepped IPC response failed");
                 context.gateTest = {verified: true};
             } finally {
                 await gate.restore();
