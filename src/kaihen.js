@@ -8,7 +8,7 @@
 
 import coreRuntime from "./core/runtime.mjs";
 import {createContext, khLog, hex, check, loadLedger, stageDone,
-    stageRecord, arenaSlots, ensureArena, SD_MANIFEST, arenaAlloc, HEN_TITLE}
+    stageRecord, arenaSlots, ensureArena, SD_MANIFEST, HEN_TITLE}
     from "./kaihen/state.mjs";
 import {armEndpoint, readFs, writeFs} from "./kaihen/endpoint.mjs";
 import {bareSendTransport} from "./kaihen/wire.mjs";
