@@ -60,16 +60,32 @@ export async function runBootstrap(context, options = {}) {
     // open (steps[1]/[8], object 9 = the loader entry) — we mirror that
     // first, then log both replies so a dead bootstrap names its step.
     {
-        const loaderEntryId = (context.loaderRoot.entry -
-            context.layout.table) / 0x30 + 1;
-        const scp = arenaAlloc(context, 0x200, "scp-packet");
-        const scpReply = sendContext(context, loaderEntryId, {pkt: scp,
-            cmd: 2, token: 0x00180001, pid: true,
-            input: [0, 0, 0, 0, 0, 0, 0, 0]});
-        await khLog("PP SetCurrentProcess t=" + hex(scpReply.transport) +
-            " result=" + hex(scpReply.result === -1 ? 0xffffffff :
-                scpReply.result) + " [" +
-            scpReply.words.slice(0, 12).map(w => hex(w)).join(" ") + "]");
+        // SetCurrentProcess must reach the LOADER's object. Routing to the
+        // loader's own entry id through our domain kills it (foreign entry,
+        // run117); the IS probe's valid route is our OWN entry id while the
+        // loader pair is borrowed into it — the same route the IS code-open
+        // uses, and what the loader itself does before opening code.
+        const entry20 = context.loaderCopy.ownEntry + 0x20;
+        const oldPair = await readFs(context, entry20, 0x10);
+        const borrowPair = await readFs(
+            context.loaderRoot.entry + 0x20, 0x10);
+        let scpOk = false;
+        try {
+            await writeFs(context, entry20, borrowPair);
+            const scp = arenaAlloc(context, 0x200, "scp-packet");
+            const scpReply = sendContext(context,
+                context.inspectionDomain.root, {pkt: scp,
+                    cmd: 2, token: 0x00180001, pid: true,
+                    input: [0, 0, 0, 0, 0, 0, 0, 0]});
+            scpOk = scpReply.transport === 0 && scpReply.result === 0;
+            await khLog("PP SetCurrentProcess t=" + hex(scpReply.transport) +
+                " result=" + hex(scpReply.result === -1 ? 0xffffffff :
+                    scpReply.result) + " [" +
+                scpReply.words.slice(0, 12).map(w => hex(w)).join(" ") + "]");
+        } finally {
+            await writeFs(context, entry20, oldPair);
+        }
+        check(scpOk, "SetCurrentProcess on the loader object failed");
 
         const probe = arenaAlloc(context, 0x200, "policy-probe");
         for (let i = 0n; i < 0x200n; i += 8n) runtime.write64(probe + i, 0n);
