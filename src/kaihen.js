@@ -8,8 +8,12 @@
 
 import coreRuntime from "./core/runtime.mjs";
 import {createContext, khLog, hex, check, loadLedger, stageDone,
-    stageRecord, arenaSlots, ensureArena, SD_MANIFEST} from "./kaihen/state.mjs";
+    stageRecord, arenaSlots, ensureArena, SD_MANIFEST, arenaAlloc, HEN_TITLE}
+    from "./kaihen/state.mjs";
 import {armEndpoint, readFs, writeFs} from "./kaihen/endpoint.mjs";
+import {bareSendTransport} from "./kaihen/wire.mjs";
+import {sendContext} from "./kaihen/wire-context.mjs";
+import runtime from "./core/runtime.mjs";
 import {deriveLayout, findLoaderRoot, readThreadRing} from "./kaihen/layout.mjs";
 import {dumpChainState} from "./kaihen/diff.mjs";
 import {threadSendProbe} from "./kaihen/threadsend.mjs";
@@ -220,6 +224,62 @@ export async function run() {
         await stage("loader-copy", async () => {
             await openInspectionDomain(context);
             await copyLoaderRoot(context);
+            // PP: the bootstrap's copy-session negotiation (disassembled
+            // readSignedPolicy), replicated here on fresh state — log-only.
+            // The Loader's own recorded sequence sends SetCurrentProcess
+            // (cmd 2, pid) on the root object before any code open.
+            {
+                const entry20 = context.loaderCopy.ownEntry + 0x20;
+                const oldPair = await readFs(context, entry20, 0x10);
+                const borrowPair = await readFs(
+                    context.loaderRoot.entry + 0x20, 0x10);
+                try {
+                    await writeFs(context, entry20, borrowPair);
+                    const scp = arenaAlloc(context, 0x200, "scp-packet");
+                    const scpReply = sendContext(context,
+                        context.inspectionDomain.root, {pkt: scp,
+                            cmd: 2, token: 0x00180001, pid: true,
+                            input: [0, 0, 0, 0, 0, 0, 0, 0]});
+                    await khLog("PP SetCurrentProcess t=" +
+                        hex(scpReply.transport) + " result=" +
+                        hex(scpReply.result === -1 ? 0xffffffff :
+                            scpReply.result));
+                } finally {
+                    await writeFs(context, entry20, oldPair);
+                }
+                const probe = arenaAlloc(context, 0x200, "policy-probe");
+                for (let i = 0n; i < 0x200n; i += 8n)
+                    runtime.write64(probe + i, 0n);
+                runtime.write32(probe, 5n);                 // type 5, no descs
+                runtime.write32(probe + 4n, 8n);            // 8 words
+                runtime.write32(probe + 0x10n, 0x49434653n); // SFCI
+                runtime.write32(probe + 0x18n, 3n);         // cmd 3
+                const t5 = bareSendTransport(context.loaderCopy.handle,
+                    probe);
+                await khLog("PP type5-probe t=" + hex(t5));
+                const info = arenaAlloc(context, 0x2000, "policy-info");
+                const pkt2 = arenaAlloc(context, 0x200, "policy-open");
+                for (let i = 0n; i < 0x200n; i += 8n)
+                    runtime.write64(pkt2 + i, 0n);
+                runtime.write32(pkt2, 0x01000004n);         // type 4, 1 B
+                runtime.write32(pkt2 + 4n, 0x0cn);          // 12 words
+                const bAddr = BigInt(info);
+                runtime.write32(pkt2 + 8n, 0x1a4n);
+                runtime.write32(pkt2 + 0xcn,
+                    BigInt(Number(bAddr & 0xffffffffn)));
+                const bFlags = (((bAddr >> 32n) & 0xfn) << 28n) |
+                    (((bAddr >> 36n) & 7n) << 2n);          // attr 0
+                runtime.write32(pkt2 + 0x10n, BigInt(Number(bFlags)));
+                runtime.write32(pkt2 + 0x20n, 0x49434653n); // SFCI
+                runtime.write32(pkt2 + 0x28n, 0n);          // cmd 0
+                runtime.write32(pkt2 + 0x30n, 0x0301n);     // attrs 1, storage 3
+                runtime.write64(pkt2 + 0x38n, BigInt(HEN_TITLE));
+                const t4 = bareSendTransport(context.loaderCopy.handle,
+                    pkt2);
+                await khLog("PP type4-codeopen t=" + hex(t4) +
+                    " result=" + hex(Number(runtime.read32(pkt2 + 0x14n)) >>>
+                        0) + " sig=" + runtime.read32(info + 0x1a0n));
+            }
             // The instant-send probe runs FIRST: its entire premise is that
             // nothing sits between the copy and the first send.
             await instantSendProbe(context, RO_TITLE);

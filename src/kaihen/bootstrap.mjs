@@ -71,83 +71,10 @@ export async function runBootstrap(context, options = {}) {
         await armEndpoint(context);
     }
 
-    // Replicate the bootstrap's protocol negotiation on the copy session
-    // (disassembled readSignedPolicy @ text+0x3848): (1) a type-5
-    // RequestWithContext probe, cmd 3, no descriptors; on failure or bad
-    // reply it falls back to (2) a plain type-4 OpenCodeFileSystem cmd 0
-    // with one 0x1a4 B buffer (attr 0) and input {attrs|storage<<8, pad,
-    // program_id}. The Loader's own recorded sequence ALWAYS sends
-    // SetCurrentProcess (cmd 2, pid) on the root object before any code
-    // open (steps[1]/[8], object 9 = the loader entry) — we mirror that
-    // first, then log both replies so a dead bootstrap names its step.
-    {
-        // BS0 says the endpoint is armed at entry, yet the first PP readFs
-        // saw it disarmed (runs 119/121/124) — re-arm defensively and log.
-        await khLog("PP-prep ep=" + (!!(context.ep && context.ep.armed)) +
-            " sd=" + (globalThis.__KH && globalThis.__KH.sd ? "cached" : "null"));
-        if (!(context.ep && context.ep.armed))
-            await armEndpoint(context);
-
-        // SetCurrentProcess must reach the LOADER's object. Routing to the
-        // loader's own entry id through our domain kills it (foreign entry,
-        // run117); the IS probe's valid route is our OWN entry id while the
-        // loader pair is borrowed into it — the same route the IS code-open
-        // uses, and what the loader itself does before opening code.
-        const entry20 = context.loaderCopy.ownEntry + 0x20;
-        const oldPair = await readFs(context, entry20, 0x10);
-        const borrowPair = await readFs(
-            context.loaderRoot.entry + 0x20, 0x10);
-        let scpOk = false;
-        try {
-            await writeFs(context, entry20, borrowPair);
-            const scp = arenaAlloc(context, 0x200, "scp-packet");
-            const scpReply = sendContext(context,
-                context.inspectionDomain.root, {pkt: scp,
-                    cmd: 2, token: 0x00180001, pid: true,
-                    input: [0, 0, 0, 0, 0, 0, 0, 0]});
-            scpOk = scpReply.transport === 0 && scpReply.result === 0;
-            await khLog("PP SetCurrentProcess t=" + hex(scpReply.transport) +
-                " result=" + hex(scpReply.result === -1 ? 0xffffffff :
-                    scpReply.result) + " [" +
-                scpReply.words.slice(0, 12).map(w => hex(w)).join(" ") + "]");
-        } finally {
-            await writeFs(context, entry20, oldPair);
-        }
-        check(scpOk, "SetCurrentProcess on the loader object failed");
-
-        const probe = arenaAlloc(context, 0x200, "policy-probe");
-        for (let i = 0n; i < 0x200n; i += 8n) runtime.write64(probe + i, 0n);
-        runtime.write32(probe, 5n);                    // type 5, no descs
-        runtime.write32(probe + 4n, 8n);               // 8 words
-        runtime.write32(probe + 0x10n, 0x49434653n);   // SFCI
-        runtime.write32(probe + 0x18n, 3n);            // cmd 3
-        const t5 = bareSendTransport(context.loaderCopy.handle, probe);
-        const w5 = [];
-        for (let i = 0n; i < 12n; i++)
-            w5.push(hex(Number(runtime.read32(probe + i * 4n))));
-        await khLog("PP type5-probe t=" + hex(t5) + " [" + w5.join(" ") + "]");
-
-        const info = arenaAlloc(context, 0x2000, "policy-info");
-        const pkt2 = arenaAlloc(context, 0x200, "policy-open");
-        for (let i = 0n; i < 0x200n; i += 8n) runtime.write64(pkt2 + i, 0n);
-        runtime.write32(pkt2, 0x01000004n);            // type 4, 1 B
-        runtime.write32(pkt2 + 4n, 0x0cn);             // 12 words
-        const bAddr = BigInt(info);
-        runtime.write32(pkt2 + 8n, 0x1a4n);
-        runtime.write32(pkt2 + 0xcn, BigInt(Number(bAddr & 0xffffffffn)));
-        const bFlags = (((bAddr >> 32n) & 0xfn) << 28n) |
-            (((bAddr >> 36n) & 7n) << 2n);             // attr 0
-        runtime.write32(pkt2 + 0x10n, BigInt(Number(bFlags)));
-        runtime.write32(pkt2 + 0x20n, 0x49434653n);    // SFCI
-        runtime.write32(pkt2 + 0x28n, 0n);             // cmd 0
-        runtime.write32(pkt2 + 0x30n, 0x0301n);        // attrs 1, storage 3
-        runtime.write64(pkt2 + 0x38n, BigInt(HEN_TITLE));
-        const t4 = bareSendTransport(context.loaderCopy.handle, pkt2);
-        const w4 = [];
-        for (let i = 0n; i < 12n; i++)
-            w4.push(hex(Number(runtime.read32(pkt2 + i * 4n))));
-        await khLog("PP type4-codeopen t=" + hex(t4) + " [" + w4.join(" ") + "]");
-    }
+    // The PP negotiation (SetCurrentProcess + copy-session probe/code-open)
+    // moved to the loader-copy stage: fresh state, and the late-bootstrap
+    // variant hit a heap-state flip where context.ep read armed and unarmed
+    // with no intervening await (runs 119-127).
 
     const result = await runNroOnRawThread(context, image, argsAddress,
         args.bytes, {
