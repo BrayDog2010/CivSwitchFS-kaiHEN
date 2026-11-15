@@ -6,7 +6,7 @@
 //   node tools/kaihen.mjs CONSOLE-IP [--dir DIR] [--status-only]
 //                         [--force] [--no-hbmenu] [--no-programs]
 //
-// DIR is the unpacked kaiHEN release (default: kaiHEN-20261114c next to this
+// DIR is the unpacked kaiHEN release (default: kaiHEN-20261114d next to this
 // repository). The main CivSwitchFS payload must have succeeded on this boot.
 
 import fs from "node:fs";
