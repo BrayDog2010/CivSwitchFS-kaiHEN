@@ -66,6 +66,11 @@ a computer, and place the release files like this:
 | `hbmenu.nro` | `/hbmenu.nro` |
 | `programs/ounceshell.nro` | `/switch/ounceshell.nro` |
 
+The last two are optional: the HEN chain runs without them, but holding
+R opens `hbmenu.nro`, so leave it out only if you don't need the
+homebrew menu. Missing optional files log a warning; a missing
+chain-critical file refuses before the boot is consumed.
+
 If a file is missing, the chain refuses right after the promotion with
 `SD files missing: …` instead of wasting the boot.
 
@@ -114,7 +119,7 @@ If you use the persisted payload, you ofc need to rerun the installer so its sav
 boot. Once kaiHEN runs, holding R while opening a game starts hbmenu
 instead of the game. kaiHEN normally starts from SmileBASIC (a Switch
 game with a built-in BASIC interpreter); this chain starts it from
-Civilization VII. Tested with the **20261114c** release
+Civilization VII. Tested with the **20261114d** release
 on firmware 23.0.1, both docked (Ethernet) and undocked (WiFi).
 
 On top of the usual setup you need:
@@ -127,7 +132,7 @@ Run the exploit first, wait for the success line, then the launcher:
 
 ```sh
 npm run send -- <console-ip>      # wait for "You just Civ Sevened"
-node tools/kaihen.mjs <console-ip> --dir /path/to/kaiHEN-20261114c
+node tools/kaihen.mjs <console-ip> --dir /path/to/kaiHEN-20261114d
 ```
 
 A successful run ends with:
@@ -152,7 +157,7 @@ want to keep it.
 
 | Option | Effect |
 |---|---|
-| `--dir DIR` | kaiHEN release folder (default `../../kaiHEN-20261114c` from the repo root) |
+| `--dir DIR` | kaiHEN release folder (default `../kaiHEN-20261114d` from the repo root) |
 | `--status-only` | report SD state and exit |
 | `--force` | restage files even when their size already matches |
 | `--no-hbmenu`, `--no-programs` | skip staging those files |

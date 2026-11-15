@@ -185,13 +185,23 @@ export async function run() {
     // bootstrap stage, after the swap). Entry-presence only — sizes are
     // verified by sdFileStatus in status mode.
     if (globalThis.__KH_MANIFEST) {
+        const optional = name => Boolean(globalThis.__KH_MANIFEST[name] &&
+            globalThis.__KH_MANIFEST[name].optional);
         const missing = await verifySdFiles(context);
-        if (missing.length) {
-            await khLog("SD files missing: " + missing.join(", ") +
-                " — stage /kaihen (kaiHEN launcher or manual SD copy)" +
-                " and restart the game");
-            check(false, "SD files missing: " + missing.join(", "));
+        const requiredMissing = missing.filter(name => !optional(name));
+        if (requiredMissing.length) {
+            await khLog("required SD files missing: " +
+                requiredMissing.join(", ") +
+                " — stage /kaihen/bin (kaiHEN launcher or manual SD" +
+                " copy) and restart the game");
+            check(false, "required SD files missing: " +
+                requiredMissing.join(", "));
         }
+        const optionalMissing = missing.filter(optional);
+        if (optionalMissing.length)
+            await khLog("WARNING: optional SD files missing (the HEN" +
+                " runs without them; holding R needs hbmenu): " +
+                optionalMissing.join(", "));
         await khLog("SD manifest present: " +
             Object.keys(globalThis.__KH_MANIFEST).join(", "));
     }
