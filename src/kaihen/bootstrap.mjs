@@ -92,7 +92,7 @@ export async function runBootstrap(context, options = {}) {
     const image = buildNroImage(text);
     check(image.length === 0x12000, "NRO image size differs");
 
-    const args = buildBootstrapArgs(context, options);
+    const args = await buildBootstrapArgs(context, options);
     const argsAddress = arenaAlloc(context, ARG_BYTES + 0x40, "bootstrap-args");
     context.bootstrapArgsAddress = Number(argsAddress);
 
@@ -336,7 +336,7 @@ export async function runBootstrap(context, options = {}) {
     return record;
 }
 
-export function buildBootstrapArgs(context, options = {}) {
+export async function buildBootstrapArgs(context, options = {}) {
     const launch = context.launch;
     const loaderDomain = context.loaderRoot.domain;
     const row = context.bound.rows.find(r => r.domain === loaderDomain);
