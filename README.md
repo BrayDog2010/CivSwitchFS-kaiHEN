@@ -11,7 +11,7 @@ CivSwitchFS is **semi-untethered**, RPC was fully removed :tada: ! It should als
 
 **It's intended for devs**, as all I give is a god `fsp-srv` handle (full FS) for you to play with. The rest is for you to figure out.
 
-> [!NOTE] If you are looking for a **reliable KaiHEN access**, this [fork](https://github.com/s8n/CivSwitchFS/tree/slop) from [@Ave](https://gitlab.com/a) will get you there in no time.
+> [!NOTE] If you are looking for a **reliable KaiHEN access**, this [fork](https://github.com/s8n/CivSwitchFS/tree/slop) from [@Ave](https://github.com/aveao) will get you there in no time.
 
 ### Tested configuration
 
@@ -44,10 +44,6 @@ npm run persist:install -- <console-ip> [--minify-payload]
 Future launches from that save start the exploit, loader, and
 payload automatically, without a computer or network connection. 
 
-The persisted payload removes whitespace and comments by default while keeping
-source names and syntax. Pass `--debug-payload` to preserve formatting, or
-`--minify-payload` to also shorten ESM local identifiers.
-
 The installer does not back up the old save. 
 
 ### Launch the exploit
@@ -73,7 +69,7 @@ var roleDelays = [0, 300000, 350000, 450000, 550000, 650000, 1000000, 1200000, 1
 var guardDelays = [150000, 300000];
 ~~~
 
-The trigger's initial sleep is 1,600,000 ns. The [Slapah](https://github.com/byizmysh/IZCIVSwitch/blob/main/NOTICE.md#upstream)/[Kurumuz](https://gitlab.com/kurumuz/ns2jb)
+The trigger's initial sleep is 1,600,000 ns. The [Kurumuz](https://gitlab.com/kurumuz/ns2jb)
 reference schedule used these instead (might help if it worked for you on those)
 
 ~~~js
@@ -122,7 +118,3 @@ tools/               # well, tools
 ## License
 
 The original code in this repository is distributed under the MIT license. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for detailed notices and credits.
-
-For technical details, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
-
-This project is not affiliated with or endorsed by Nintendo. It contains no Nintendo firmware, keys, tickets, or personal saves; `persist/save_template.bin` is the pristine trigger template used by the installer.
