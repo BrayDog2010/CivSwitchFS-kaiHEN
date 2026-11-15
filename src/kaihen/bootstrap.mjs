@@ -28,6 +28,8 @@ function hexToBytes(text) {
 }
 
 export async function runBootstrap(context, options = {}) {
+    await khLog("BS0 ep=" + (!!(context.ep && context.ep.armed)) +
+        " tracked=" + (context.handles ? context.handles.length : "?"));
     // Load bootstrap.bin from the staged SD file.
     const sd = openSdCard(context);
     const staged = globalThis.__KH_MANIFEST.bootstrap;
