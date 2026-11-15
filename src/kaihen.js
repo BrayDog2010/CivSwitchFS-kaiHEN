@@ -37,7 +37,8 @@ import {connectRoFrontend} from "./kaihen/ro.mjs";
 import {runBootstrap} from "./kaihen/bootstrap.mjs";
 import {openSdCard, sdGetEntryType, sdReadFile, sdWriteFile, sdOpenFile,
     sdFileSize, ensureSdDirectories, removeSdFile, createSdFile,
-    sdWriteFileChunk, sdCommit, relocateSdRelease} from "./kaihen/sdcard.mjs";
+    sdWriteFileChunk, sdCommit, relocateSdRelease, sdSkipCheckPresent}
+    from "./kaihen/sdcard.mjs";
 import {RO_TITLE, readU64LE, arenaAlloc, track, u64Bytes, bytesToHex}
     from "./kaihen/state.mjs";
 import {buildCmif, bareSendTransport, cmifSend} from "./kaihen/wire.mjs";
@@ -187,6 +188,13 @@ export async function run() {
     if (globalThis.__KH_MANIFEST) {
         const optional = name => Boolean(globalThis.__KH_MANIFEST[name] &&
             globalThis.__KH_MANIFEST[name].optional);
+        // Flag file /kaihen/civswitchfs-skipcheck: skip file-identity
+        // (size) checks so a different kaiHEN build can run; presence is
+        // still enforced.
+        context.sdSkipCheck = sdSkipCheckPresent(context);
+        if (context.sdSkipCheck)
+            await khLog("SD: /kaihen/civswitchfs-skipcheck present — " +
+                "file identity checks skipped (presence only)");
         let missing = await verifySdFiles(context);
         if (missing.length) {
             // Self-heal: if the kaiHEN release was extracted straight onto
@@ -421,10 +429,11 @@ export async function run() {
             const status = await sdFileStatus(context);
             const bad = [];
             for (const [name, item] of Object.entries(status)) {
-                if (!item.present || !item.ok) bad.push(name +
-                    (item.present ? "(size)" : "(missing)"));
+                if (!item.present || (!context.sdSkipCheck && !item.ok))
+                    bad.push(name + (item.present ? "(size)" : "(missing)"));
             }
-            await khLog("SD check: " + (bad.length ?
+            await khLog("SD check" + (context.sdSkipCheck ?
+                " (skipcheck: presence only): " : ": ") + (bad.length ?
                 "problems: " + bad.join(", ") : "all present"));
             const optional = Object.keys(globalThis.__KH_MANIFEST || {})
                 .filter(name => globalThis.__KH_MANIFEST[name].optional);

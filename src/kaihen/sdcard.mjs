@@ -325,3 +325,12 @@ export async function relocateSdRelease(context, missing) {
     }
     return [];
 }
+
+// Flag file: when /kaihen/civswitchfs-skipcheck exists, the chain skips
+// file-identity checks (sizes vs the pinned manifest) so a different
+// kaiHEN build can be run; presence is still required.
+export function sdSkipCheckPresent(context) {
+    const sd = openSdCard(context);
+    const probe = sdGetEntryType(context, sd, "/kaihen/civswitchfs-skipcheck");
+    return probe.transport === 0 && probe.result === 0;
+}

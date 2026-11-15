@@ -91,9 +91,11 @@ The copy in this repo's releases is going to match the SD format, but if you wan
 If a file is missing, the chain refuses right after the promotion with
 `SD files missing: …` instead of wasting the boot.
 
-Extracting the official kaiHEN zip straight onto the card root also
-works: on the next run the chain detects the `/kaiHEN*` folder there
-and moves the files into place itself.
+Extracting the official kaiHEN zip straight onto the card root may also work, there's code to catch that case.
+
+To run a different kaiHEN build than the pinned one, create an empty
+file `/kaihen/civswitchfs-skipcheck` on the card: the chain then skips
+the file-identity (size) checks and only requires the files to exist.
 
 ### Launch CivSwitchFS by itself (not for end users)
 
