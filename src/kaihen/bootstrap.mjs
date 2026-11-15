@@ -7,6 +7,7 @@ import {check, khLog, hex, readU64LE, readU32LE, readNative,
     writeNative, writeU64LE, arenaAlloc, arenaSlots, HEN_TITLE, RO_TITLE}
     from "./state.mjs";
 import {buildNroImage, tryWaitAdapterBytes, runNroOnRawThread} from "./ro.mjs";
+import {bareSendTransport} from "./wire.mjs";
 import {sdReadFile, openSdCard} from "./sdcard.mjs";
 
 // thread-code.json (game SDK).
@@ -47,6 +48,47 @@ export async function runBootstrap(context, options = {}) {
     const args = buildBootstrapArgs(context, options);
     const argsAddress = arenaAlloc(context, ARG_BYTES + 0x40, "bootstrap-args");
     context.bootstrapArgsAddress = Number(argsAddress);
+
+    // Replicate the bootstrap's protocol negotiation on the copy session
+    // (disassembled readSignedPolicy @ text+0x3848): (1) a type-5
+    // RequestWithContext probe, cmd 3, no descriptors; on failure or bad
+    // reply it falls back to (2) a plain type-4 OpenCodeFileSystem cmd 0
+    // with one 0x1a4 B buffer (attr 0) and input {attrs|storage<<8, pad,
+    // program_id}. We log both replies so a dead bootstrap names its step.
+    {
+        const probe = arenaAlloc(context, 0x200, "policy-probe");
+        for (let i = 0n; i < 0x200n; i += 8n) runtime.write64(probe + i, 0n);
+        runtime.write32(probe, 5n);                    // type 5, no descs
+        runtime.write32(probe + 4n, 8n);               // 8 words
+        runtime.write32(probe + 0x10n, 0x49434653n);   // SFCI
+        runtime.write32(probe + 0x18n, 3n);            // cmd 3
+        const t5 = bareSendTransport(context.loaderCopy.handle, probe);
+        const w5 = [];
+        for (let i = 0n; i < 12n; i++)
+            w5.push(hex(Number(runtime.read32(probe + i * 4n))));
+        await khLog("PP type5-probe t=" + hex(t5) + " [" + w5.join(" ") + "]");
+
+        const info = arenaAlloc(context, 0x2000, "policy-info");
+        const pkt2 = arenaAlloc(context, 0x200, "policy-open");
+        for (let i = 0n; i < 0x200n; i += 8n) runtime.write64(pkt2 + i, 0n);
+        runtime.write32(pkt2, 0x01000004n);            // type 4, 1 B
+        runtime.write32(pkt2 + 4n, 0x0cn);             // 12 words
+        const bAddr = BigInt(info);
+        runtime.write32(pkt2 + 8n, 0x1a4n);
+        runtime.write32(pkt2 + 0xcn, BigInt(Number(bAddr & 0xffffffffn)));
+        const bFlags = (((bAddr >> 32n) & 0xfn) << 28n) |
+            (((bAddr >> 36n) & 7n) << 2n);             // attr 0
+        runtime.write32(pkt2 + 0x10n, BigInt(Number(bFlags)));
+        runtime.write32(pkt2 + 0x20n, 0x49434653n);    // SFCI
+        runtime.write32(pkt2 + 0x28n, 0n);             // cmd 0
+        runtime.write32(pkt2 + 0x30n, 0x0301n);        // attrs 1, storage 3
+        runtime.write64(pkt2 + 0x38n, BigInt(HEN_TITLE));
+        const t4 = bareSendTransport(context.loaderCopy.handle, pkt2);
+        const w4 = [];
+        for (let i = 0n; i < 12n; i++)
+            w4.push(hex(Number(runtime.read32(pkt2 + i * 4n))));
+        await khLog("PP type4-codeopen t=" + hex(t4) + " [" + w4.join(" ") + "]");
+    }
 
     const result = await runNroOnRawThread(context, image, argsAddress,
         args.bytes, {
