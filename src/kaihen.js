@@ -11,7 +11,6 @@ import {createContext, khLog, hex, check, loadLedger, stageDone,
     stageRecord, arenaSlots, ensureArena, SD_MANIFEST, HEN_TITLE}
     from "./kaihen/state.mjs";
 import {armEndpoint, readFs, writeFs} from "./kaihen/endpoint.mjs";
-import {bareSendTransport} from "./kaihen/wire.mjs";
 import {sendContext} from "./kaihen/wire-context.mjs";
 import runtime from "./core/runtime.mjs";
 import {deriveLayout, findLoaderRoot, readThreadRing} from "./kaihen/layout.mjs";
