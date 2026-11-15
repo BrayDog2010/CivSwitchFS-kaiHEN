@@ -12,6 +12,7 @@ import {bareSendTransport, cmifSend} from "./wire.mjs";
 import {sendContext} from "./wire-context.mjs";
 import {readFs, writeFs, writeFsUnverified, armEndpoint} from "./endpoint.mjs";
 import {cancelApiWorkers} from "./workers.mjs";
+import {exportHandle} from "./objects.mjs";
 import {sdReadFile, openSdCard, sdGetEntryType, sdWriteFile}
     from "./sdcard.mjs";
 
@@ -300,6 +301,15 @@ export async function runBootstrap(context, options = {}) {
         gateRestoreResult: readU32LE(recordBytes, 16),
         channelRestoreResult: readU32LE(recordBytes, 20)
     };
+    // Author parity (start-hen.cjs:176): the bootstrap's readiness export
+    // closes only after the NRO completes.
+    if (context.bootstrapReadiness) {
+        try { runtime.closeHandle(context.bootstrapReadiness.handle); }
+        catch (closeError) { /* already gone */ }
+        await khLog("bootstrap gate readiness closed " +
+            hex(context.bootstrapReadiness.handle));
+        context.bootstrapReadiness = null;
+    }
     await khLog("HEN startup record: operation=" + record.operation +
         " result=0x" + record.result.toString(16) + " pid=" + record.pid +
         " returned=" + result.returned +
@@ -333,7 +343,19 @@ export function buildBootstrapArgs(context, options = {}) {
     const donor = context.donorRow;
     const layout = context.layout;
     const event = context.gateEvent;
-    const exported = context.loaderServerExport;
+    // The bootstrap's gate needs its OWN readiness export: the author's
+    // start-hen exports a fresh one ('Native launch Loader readiness',
+    // start-hen.cjs:66) after launch.cjs closed the launch's, and closes
+    // it only after the NRO completes (:176). Our launch now closes its
+    // export at the author's point (run151's "bootstrap args need ..."
+    // was this null), so make up a fresh one here.
+    let exported = context.loaderServerExport;
+    if (!exported) {
+        exported = await exportHandle(context, row.receive,
+            "bootstrap gate readiness");
+        context.bootstrapReadiness = exported;
+        await khLog("bootstrap gate readiness exported " + hex(exported.handle));
+    }
     check(row && donor && event && exported && exported.handle,
         "bootstrap args need the launch session, donor, event, and export");
     check(context.apiWorkers && context.apiWorkers.length === 7,
