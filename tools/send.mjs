@@ -10,7 +10,9 @@ import path from "node:path";
 import {StringDecoder} from "node:string_decoder";
 import {buildPayload, DEFAULT_ENTRY, ROOT} from "./bundle.mjs";
 
-const TIMEOUT_MS = 240_000;
+// Whole-payload receive timeout. A full acquisition→promotion run can take
+// several minutes after the canary flips; raise via env for full-chain runs.
+const TIMEOUT_MS = Number(process.env.CIVSWITCHFS_SEND_TIMEOUT_MS) || 240_000;
 
 function formatLogTimestamp(date = new Date()) {
     const pad = (value, width = 2) => String(value).padStart(width, "0");

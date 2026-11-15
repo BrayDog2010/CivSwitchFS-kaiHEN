@@ -41,8 +41,10 @@ export function createFspIdentityConfig() {
 
   // CivSwitchFS original SLEEP offsets in nanoseconds; the canary loop may
   // retune them from measured role spans, within a bounded drift.
-  // Slapah/Kurumuz reference: [0, 300000, 350000, 450000, 550000, 650000,
-  //                           1700000, 2000000, 2150000, 2800000].
+  // 2026-11-14: tried the full Slapah/Kurumuz reference schedule for boots 7-8:
+  // flip rate collapsed (70% windows, no flip in 12 attempts, retune stalled a
+  // canary check for 79s and cleanup failed). Reverted to the hybrid schedule,
+  // which lands flips on attempts 1-2.
   var roleDelays = [0, 300000, 350000, 450000, 550000, 650000,
                     1000000, 1200000, 1300000, 1700000];
   // Guard delays after groupReleased, in nanoseconds.

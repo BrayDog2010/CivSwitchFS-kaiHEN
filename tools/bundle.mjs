@@ -20,7 +20,10 @@ export const MAX_PAYLOAD_BYTES = 500_000;
 // Loader globals that are always available to an injected payload.
 export const CORE_GLOBALS = [
     "log", "read8", "read32", "read64",
-    "write8", "write32", "write64", "call_rop"
+    "write8", "write32", "write64", "call_rop",
+    // Ambient loader-scope bindings (CivSwitch core.js eval scope): the heap
+    // allocator pair, the module bases, and the sleep helper.
+    "malloc", "free", "sdk_base", "main_base", "sleep"
 ];
 
 // Dependency order matters: constants and low-level helpers must be declared

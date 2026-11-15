@@ -764,6 +764,37 @@ export async function runPromotionAndUserStorageProbe(input) {
 
         outcome.userStorageTestPassed = true;
         globalThis.fspSrv = domainSession;
+        // Retained-boot snapshot for follow-up payloads (kaiHEN start): the
+        // two-bucket endpoint re-arms from the candidate IStorage alone, and
+        // the domain layout provides the table/manager/root vtable addresses.
+        globalThis.fsKaihen = {
+            domainSession: {handle: domainSession.handle, rootObj: domainSession.rootObj},
+            candidateHandle: candidateHandle,
+            storageSize: addressPlan.storageSize,
+            endpoint: retainedEndpoint ? {
+                array: retainedEndpoint.array, owner: retainedEndpoint.owner,
+                arrayLength: retainedEndpoint.arrayLength,
+                dataOffset: retainedEndpoint.dataOffset,
+                dataEntryOffset: retainedEndpoint.dataEntryOffset,
+                scratchOffset: retainedEndpoint.scratchOffset
+            } : null,
+            domainLayout: verifiedIdentityTargets.domainLayout ? {
+                domainId: verifiedIdentityTargets.domainLayout.domainId,
+                entry: verifiedIdentityTargets.domainLayout.entry,
+                domain: verifiedIdentityTargets.domainLayout.domain,
+                object: verifiedIdentityTargets.domainLayout.object,
+                manager: verifiedIdentityTargets.domainLayout.manager,
+                table: verifiedIdentityTargets.domainLayout.table,
+                rootVptr: verifiedIdentityTargets.domainLayout.rootVptr,
+                captureStart: verifiedIdentityTargets.domainLayout.captureStart,
+                captureEnd: verifiedIdentityTargets.domainLayout.captureEnd
+            } : null,
+            identityObjects: fields.map(function(field) {
+                return {name: field.name, object: field.object,
+                    objectSize: field.objectSize, pidOffset: field.pidOffset,
+                    pid: Number(field.before)};
+            })
+        };
         promotedSessionRetained = true;
         outcome.promotionRetained = true;
         await log("PROMOTION: User storage test passed; promoted session bound " +
