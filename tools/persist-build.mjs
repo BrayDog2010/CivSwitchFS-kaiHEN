@@ -302,6 +302,10 @@ function readOptions(args) {
             options.minifyPayload = true;
             continue;
         }
+        if (arg === "--no-minify-payload") {
+            options.minifyPayload = false;
+            continue;
+        }
         if (["--core", "--template", "--decoder"].includes(arg)) {
             const value = args[++index];
             if (!value) throw new Error(`Valeur manquante pour ${arg}`);
