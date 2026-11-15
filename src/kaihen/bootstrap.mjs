@@ -133,8 +133,14 @@ export async function runBootstrap(context, options = {}) {
             () => khLog(".");
         const slots = arenaSlots(context);
         const gateInput = [1, 0, 0, 0, 0, 0, 0, 0].concat(u64Bytes(HEN_TITLE));
+        // 240 x 500ms = a 2-minute budget: the game's menu-time content /
+        // entitlement checks (network-bound; fast on Ethernet, slow on WiFi)
+        // keep a mount request in flight on the loader domain session for
+        // what can be tens of seconds — runs 142/143 saturate a 22.5s
+        // window 150/150 on WiFi where docked/Ethernet runs idle at once.
         let idle = false, last = -1, busy = 0;
-        for (let attempt = 0; attempt < 150 && !idle; attempt++) {
+        const gateStart = Date.now();
+        for (let attempt = 0; attempt < 240 && !idle; attempt++) {
             const reply = cmifSend(context.loaderCopy.handle,
                 {pkt: slots.pkt, cmd: 0, input: gateInput,
                     b: [{addr: slots.info + 32n, size: 0x1a4}]});
@@ -149,9 +155,10 @@ export async function runBootstrap(context, options = {}) {
             }
             if (reply.transport === 0xF601) {
                 busy++;
-                if (busy % 25 === 1)
-                    await khLog("BS-cmd0 busy x" + busy + " — waiting");
-                await idleDelay(150);
+                if (busy % 10 === 1)
+                    await khLog("BS-cmd0 busy x" + busy + " +" +
+                        Math.round((Date.now() - gateStart) / 1000) + "s — waiting");
+                await idleDelay(500);
                 continue;
             }
             last = reply.transport;
