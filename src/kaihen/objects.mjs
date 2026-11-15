@@ -27,6 +27,12 @@ export async function openNotifier(context) {
     check(fsRootPlain > 0, "plain root clone for the notifier failed");
     context.fsRootPlain = fsRootPlain;
     track(context, fsRootPlain, "fs-root-plain");
+    // A fresh root clone is NOT pid-initialized — the author's root flow
+    // sends root-initialize when needed, and the bootstrap's plain fs
+    // commands (cmd 10/18/51) die with 0xF601 without it (run109).
+    const rootInit = cmifSend(fsRootPlain, {pkt: slots.pkt2, cmd: 1,
+        input: u64Bytes(0n), pid: true, rawWords: 10});
+    requireOk(rootInit, "plain root Initialize");
 
     const reply = cmifSend(fsRootPlain, {
         pkt: slots.pkt, cmd: 510, input: [], rawWords: 8
