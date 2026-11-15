@@ -27,12 +27,6 @@ export async function openNotifier(context) {
     check(fsRootPlain > 0, "plain root clone for the notifier failed");
     context.fsRootPlain = fsRootPlain;
     track(context, fsRootPlain, "fs-root-plain");
-    // A fresh root clone is NOT pid-initialized — the author's root flow
-    // sends root-initialize when needed, and the bootstrap's plain fs
-    // commands (cmd 10/18/51) die with 0xF601 without it (run109).
-    const rootInit = cmifSend(fsRootPlain, {pkt: slots.pkt2, cmd: 1,
-        input: u64Bytes(0n), pid: true, rawWords: 10});
-    requireOk(rootInit, "plain root Initialize");
 
     const reply = cmifSend(fsRootPlain, {
         pkt: slots.pkt, cmd: 510, input: [], rawWords: 8
@@ -88,6 +82,22 @@ export async function openNotifier(context) {
         readEvent, located};
     await khLog("notifier object=" + hex(proof.object) + " B=" + hex(proof.B) +
         " event=" + hex(proof.eventHandle));
+
+    // Dedicated pid-initialized fsp-srv for the bootstrap (the author's
+    // root-open: a FRESH openService('fsp-srv') + Initialize(cmd 1, pid) —
+    // never a clone of the promoted session, and the promoted clone must
+    // NOT be re-initialized; doing so corrupted the shared session state
+    // and the notifier open failed on the next two boots with 0xBC320002/
+    // 0xEEB20002).
+    const dedicated = runtime.openService("fsp-srv");
+    check(dedicated > 0, "dedicated fsp-srv open failed");
+    track(context, dedicated, "fsp-dedicated");
+    const dSlots = arenaSlots(context);
+    const rootInit = cmifSend(dedicated, {pkt: dSlots.pkt2, cmd: 1,
+        input: u64Bytes(0n), pid: true, rawWords: 10});
+    requireOk(rootInit, "dedicated root Initialize");
+    context.fsRootDedicated = dedicated;
+    await khLog("dedicated fsp-srv initialized handle=" + hex(dedicated));
     return context.notifier;
 }
 

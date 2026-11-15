@@ -144,10 +144,11 @@ export function buildBootstrapArgs(context, options = {}) {
     u64(272, Number(sdk_base) + PTHREAD.tryWait); // replaced by the adapter
     u64(280, Number(sdk_base) + PTHREAD.join);
     u32(288, context.pm.sm);
-    // fsRoot: a PLAIN session to the promoted root object — the bootstrap
-    // issues plain fsp-srv commands (cmd 10/18/51) on it, and our domain
-    // session handle would require domain routing.
-    u32(296, context.fsRootPlain);
+    // fsRoot: the DEDICATED pid-initialized fsp-srv session — the author's
+    // root-open (fresh openService + Initialize). The bootstrap issues
+    // plain fsp-srv commands (cmd 10/18/51) on it and needs the pid
+    // binding (run109: the uninitialized promoted clone returned 0xF601).
+    u32(296, context.fsRootDedicated);
     const packagePath = "@Sdcard:/ouncehen/bin/hen/exefs.nsp";
     for (let i = 0; i < packagePath.length; i++)
         bytes[300 + i] = packagePath.charCodeAt(i);
