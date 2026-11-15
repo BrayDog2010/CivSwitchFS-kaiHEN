@@ -7,7 +7,7 @@ import {check, khLog, hex, readU64LE, readU32LE, readNative,
     writeNative, writeU64LE, arenaAlloc, arenaSlots, HEN_TITLE, RO_TITLE}
     from "./state.mjs";
 import {buildNroImage, tryWaitAdapterBytes, runNroOnRawThread} from "./ro.mjs";
-import {bareSendTransport} from "./wire.mjs";
+import {bareSendTransport, cmifSend} from "./wire.mjs";
 import {sendContext} from "./wire-context.mjs";
 import {readFs, writeFs, armEndpoint} from "./endpoint.mjs";
 import {sdReadFile, openSdCard, sdGetEntryType, sdWriteFile}
@@ -44,6 +44,34 @@ export async function runBootstrap(context, options = {}) {
         "/kaihen/bin/hen/main is missing on SD — run the kaiHEN launcher " +
         "to stage the /kaihen files");
     await khLog("/kaihen/bin/hen/main staged");
+
+    // The bootstrap's first fs op (SdReader/SdWriter::begin) is cmd 18
+    // (OpenSdCardFileSystem) on the fs_root session (arg 296). Our chain's
+    // proven cmd-18 session is the promoted clone; the dedicated root's
+    // pid-init may not be sufficient for it (op-17 failed 0x__720002 on
+    // both boots). Probe both and hand the bootstrap the one that works.
+    {
+        const slots = arenaSlots(context);
+        const try18 = (handle, label) => {
+            const reply = cmifSend(handle,
+                {pkt: slots.pkt, cmd: 18, input: [], rawWords: 8});
+            const ok = reply.transport === 0 && reply.result === 0;
+            if (reply.moves && reply.moves.length)
+                try { runtime.closeHandle(reply.moves[0]); }
+                catch (e) { /* already dead */ }
+            khLog("BS-cmd18 " + label + " t=" + hex(reply.transport) +
+                " result=" + hex(reply.result === undefined ?
+                    0xffffffff : reply.result));
+            return ok;
+        };
+        const plainOk = try18(context.fsRootPlain, "plain");
+        const dedicatedOk = context.fsRootDedicated ?
+            try18(context.fsRootDedicated, "dedicated") : false;
+        context.bootstrapFsRoot = plainOk ? context.fsRootPlain :
+            dedicatedOk ? context.fsRootDedicated : context.fsRootDedicated;
+        await khLog("BS fs_root = " + (plainOk ? "plain" :
+            dedicatedOk ? "dedicated" : "neither (fallback dedicated)"));
+    }
     const staged = globalThis.__KH_MANIFEST.bootstrap;
     const bootstrapFile = sdReadFile(context, sd, staged.path, 0x100000);
     let text = bootstrapFile.bytes;
@@ -187,11 +215,9 @@ export function buildBootstrapArgs(context, options = {}) {
     u64(272, Number(sdk_base) + PTHREAD.tryWait); // replaced by the adapter
     u64(280, Number(sdk_base) + PTHREAD.join);
     u32(288, context.pm.sm);
-    // fsRoot: the DEDICATED pid-initialized fsp-srv session — the author's
-    // root-open (fresh openService + Initialize). The bootstrap issues
-    // plain fsp-srv commands (cmd 10/18/51) on it and needs the pid
-    // binding (run109: the uninitialized promoted clone returned 0xF601).
-    u32(296, context.fsRootDedicated);
+    // fsRoot: the session that can actually open the SD (BS-cmd18 probe);
+    // the bootstrap issues plain fsp-srv commands (cmd 10/18/51) on it.
+    u32(296, context.bootstrapFsRoot || context.fsRootDedicated);
     const packagePath = "@Sdcard:/kaihen/bin/hen/exefs.nsp";
     for (let i = 0; i < packagePath.length; i++)
         bytes[300 + i] = packagePath.charCodeAt(i);
