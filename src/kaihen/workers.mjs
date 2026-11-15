@@ -39,7 +39,10 @@ export function makeEvent(context, name) {
     runtime.write64(address, 0n);
     runtime.write64(address + 8n, 0n);
     const rc = call_rop(sdk_base + BigInt(EVENT_CODE.initialize), address, 0n, 0n);
-    check(Number(rc) >>> 0 === 0, "event " + name + " initialize failed");
+    // The SDK event initializer is void — its x0 return is whatever the
+    // epilogue left there (the author's events.cjs ignores it too). The
+    // authoritative check is the state it wrote, verified below.
+    void rc;
     const bytes = readNative(address, 8);
     check(bytes[0] === 0 && bytes[1] === 1 && readU32LE(bytes, 4) === 0,
         "event " + name + " did not initialize unsignaled");
