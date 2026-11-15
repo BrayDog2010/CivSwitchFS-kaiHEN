@@ -151,9 +151,12 @@ function parseArgs(args) {
             options.payloadModeSpecified = true;
             continue;
         }
+        if (arg === "--no-minify-payload") {
+            options.minifyPayload = false;
+            continue;
+        }
         if (arg === "--chain") {
             options.chain = true;
-            options.payloadModeSpecified = true;
             continue;
         }
         if (arg === "--port" || arg === "--bootstrap" || arg === "--template") {
