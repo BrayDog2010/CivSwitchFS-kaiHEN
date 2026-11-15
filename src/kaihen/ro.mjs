@@ -164,12 +164,13 @@ export async function runNroOnRawThread(context, imageBytes, argsAddress,
     // 0x818C000); the author's nro.cjs applies no range check.
     check(destination > 0 && destination < 0x800000000000,
         "LoadNRO returned no destination: " + hex(destination));
+    const base = BigInt(destination);
 
     // Verify segment mappings (RX/R/RW/RW at the four offsets).
     const offsets = [0, 0x10000, 0x11000, 0x12000];
     const expected = [5, 1, 3, 3];
     for (let i = 0; i < offsets.length; i++) {
-        const region = queryMemory(destination + BigInt(offsets[i]));
+        const region = queryMemory(base + BigInt(offsets[i]));
         check(region && region.permissions === expected[i],
             "mapped segment permissions differ at +" +
             offsets[i].toString(16) + " (" +
@@ -180,7 +181,7 @@ export async function runNroOnRawThread(context, imageBytes, argsAddress,
     // parameter is the mapped NRO base, for entry-relative fixups).
     writeNative(argsAddress, argsBytes);
     if (options.patchArgs) await options.patchArgs(argsAddress, destination);
-    const entry = destination + 0x80n;
+    const entry = base + 0x80n;
 
     // pthread_create(slots, NULL, entry, args) on the main thread.
     const slots = allocPage(0x40);
@@ -217,7 +218,7 @@ export async function runNroOnRawThread(context, imageBytes, argsAddress,
     unloadNro(context, destination);
     const unloadOffsets = [0, 0x10000, 0x11000, 0x12000];
     for (const offset of unloadOffsets) {
-        const region = queryMemory(destination + BigInt(offset));
+        const region = queryMemory(base + BigInt(offset));
         check(!region || region.permissions === 0,
             "an NRO segment remains accessible after unload at +" +
             offset.toString(16));
