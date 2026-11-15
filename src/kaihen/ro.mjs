@@ -160,7 +160,9 @@ export async function runNroOnRawThread(context, imageBytes, argsAddress,
     const bss = source + BigInt(imageBytes.length);
 
     const destination = loadNro(context, source, imageBytes.length, bss, 0x1000);
-    check(destination > 0x100000000 && destination < 0x8000000000,
+    // NRO destinations can land in the low 32-bit range on S2 (run107:
+    // 0x818C000); the author's nro.cjs applies no range check.
+    check(destination > 0 && destination < 0x800000000000,
         "LoadNRO returned no destination: " + hex(destination));
 
     // Verify segment mappings (RX/R/RW/RW at the four offsets).
