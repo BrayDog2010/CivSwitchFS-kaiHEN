@@ -1,9 +1,9 @@
-# CivSwitchFS + kaiHEN
+# CivSwitchFS-kaiHEN
 
 > [!IMPORTANT]
-> Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepsipu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart:
+> Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepsipu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart: This is a fork of CivSwitchFS which is by Nerisma, who did the difficult work of getting FS acquisition work locally!
 
-This is payload provides **access to FS privileges** through an elevated fsp-srv handle. It runs inside the **CivSwitch Remote JS Loader**. That elevated session is exposed as `globalThis.fspSrv` for the next payloads. **IT'S ALSO TARGETTING DEVS**, *I'm sorry but other people probably won't know what to do with this !*. The FS access can be chained into a full **kaiHEN boot** (homebrew enabler) — see [Booting kaiHEN](#booting-kaihen-homebrew-enabler).
+CivSwitchFS provides **access to FS privileges** through an elevated fsp-srv handle. It runs inside the **CivSwitch Remote JS Loader**. The FS access can be chained into a full **kaiHEN boot** (homebrew enabler), which is what this fork provides, see [Booting kaiHEN](#usage).
 
 CivSwitchFS is **semi-untethered**, RPC was fully removed :tada:
 
@@ -13,9 +13,9 @@ Smol demo of CivSwitchFS booting KaiHEN: https://youtu.be/2pGN9HiXaZg
 
 ## Repo state
 
-This is meant to be sharing early code. It's not for end users. It's not cleaned properly. The branch is called slop for a reason.
+This is meant to be sharing early code. It's not cleaned properly. The branch is called slop for a reason.
 
-Either wait a bit of gamble with https://github.com/s8n/civ7-fs-kaihen
+There will be updates, and you'll need to update manually.
 
 Beware that fs vuln can be risky to utilize and may corrupt things like your save file, or more. If you want minimal brick risk, then wait on.
 
@@ -83,7 +83,7 @@ Both installers minify the payload by default. For crash debugging,
 the unminified chain image does not fit the loader's 500 KB payload
 limit, so chain builds are always minified.
 
-### Launch the exploit
+### Launch CivSwitchFS by itself (not for end users)
 
 If you are not going for persistence, just start the CivSwitch Remote JS Loader
 using your usual CivSwitch setup. Then send the payload 
@@ -199,7 +199,6 @@ of the reference implementation built on
 
 - The auto timing calibration is not perfect yet, some freezes can happen
 - Timing configuration, retries and shit will go to a persisted config file soon enough
-- THERE IS SO MUCH MORE to be done, I'm just releasing now so you guys can study the semi-untethered stuff
 - You can learn about how the exploit works [there](https://github.com/ItsNerisma/CivSwitchFS/blob/main/HOW_IT_WORKS.md)
 
 ## Project structure
@@ -217,7 +216,9 @@ tools/kaihen.mjs     # kaiHEN launcher: SD staging + the chain, see "Booting kai
 
 ## License
 
-The original code in this repository is distributed under the MIT license. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for detailed notices/
+CivSwitchFS is MIT, ns2jb and kaiHEN are GPL v2.0, and so the code ported from those in this repo are under GPL v2.0.
+
+See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for detailed notices.
 
 ## Standing on the shoulders of giants
 
@@ -230,6 +231,6 @@ The original code in this repository is distributed under the MIT license. See [
   repository builds on.
 - [kurumuz](https://github.com/kurumuz) for kaiHEN and his ns2jb fork.
 - [pepsipu](https://gitlab.com/pepsipu/ns2jb) for discovering nsj2b vuln, and the ns2jb codebase.
-- epiccsolar, who got kaihen booting ~13 hours before me, this repo doesn't use her code. This is not meant to be a very public release and we'll probably use her code for that.
+- epiccsolar, who got kaihen booting ~13 hours before me, this repo doesn't use her code, but I want to acknowledge her work.
 - LLMs were involved in the development of this. Please don't use it if you don't trust it.
 
