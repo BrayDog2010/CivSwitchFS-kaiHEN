@@ -178,6 +178,23 @@ export async function run() {
             "power-cycle the console before running again");
         check(false, "one launch per boot: power-cycle first");
     }
+
+    // Fail fast when the SD card lacks the chain's files: the launch
+    // stage consumes the boot, and a missing bootstrap/ro/hen/game would
+    // waste it (the sink-absent path used to discover this only at the
+    // bootstrap stage, after the swap). Entry-presence only — sizes are
+    // verified by sdFileStatus in status mode.
+    if (globalThis.__KH_MANIFEST) {
+        const missing = await verifySdFiles(context);
+        if (missing.length) {
+            await khLog("SD files missing: " + missing.join(", ") +
+                " — stage /kaihen (kaiHEN launcher or manual SD copy)" +
+                " and restart the game");
+            check(false, "SD files missing: " + missing.join(", "));
+        }
+        await khLog("SD manifest present: " +
+            Object.keys(globalThis.__KH_MANIFEST).join(", "));
+    }
     ensureArena(context);
     arenaSlots(context);
     // Close handles leaked by earlier failed runs on this boot (they release
