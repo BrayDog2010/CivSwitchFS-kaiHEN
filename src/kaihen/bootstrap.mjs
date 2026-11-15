@@ -8,6 +8,7 @@ import {check, khLog, hex, readU64LE, readU32LE, readNative,
     from "./state.mjs";
 import {buildNroImage, tryWaitAdapterBytes, runNroOnRawThread} from "./ro.mjs";
 import {bareSendTransport} from "./wire.mjs";
+import {sendContext} from "./wire-context.mjs";
 import {sdReadFile, openSdCard} from "./sdcard.mjs";
 
 // thread-code.json (game SDK).
@@ -54,8 +55,22 @@ export async function runBootstrap(context, options = {}) {
     // RequestWithContext probe, cmd 3, no descriptors; on failure or bad
     // reply it falls back to (2) a plain type-4 OpenCodeFileSystem cmd 0
     // with one 0x1a4 B buffer (attr 0) and input {attrs|storage<<8, pad,
-    // program_id}. We log both replies so a dead bootstrap names its step.
+    // program_id}. The Loader's own recorded sequence ALWAYS sends
+    // SetCurrentProcess (cmd 2, pid) on the root object before any code
+    // open (steps[1]/[8], object 9 = the loader entry) — we mirror that
+    // first, then log both replies so a dead bootstrap names its step.
     {
+        const loaderEntryId = (context.loaderRoot.entry -
+            context.layout.table) / 0x30 + 1;
+        const scp = arenaAlloc(context, 0x200, "scp-packet");
+        const scpReply = sendContext(context, loaderEntryId, {pkt: scp,
+            cmd: 2, token: 0x00180001, pid: true,
+            input: [0, 0, 0, 0, 0, 0, 0, 0]});
+        await khLog("PP SetCurrentProcess t=" + hex(scpReply.transport) +
+            " result=" + hex(scpReply.result === -1 ? 0xffffffff :
+                scpReply.result) + " [" +
+            scpReply.words.slice(0, 12).map(w => hex(w)).join(" ") + "]");
+
         const probe = arenaAlloc(context, 0x200, "policy-probe");
         for (let i = 0n; i < 0x200n; i += 8n) runtime.write64(probe + i, 0n);
         runtime.write32(probe, 5n);                    // type 5, no descs

@@ -26,10 +26,19 @@ export function buildContextPacket(pkt, options) {
 
     runtime.write32(pkt, BigInt(
         (0x6 | (xList.length << 16) | (bList.length << 24)) >>> 0));
-    const payloadWords = 16 + Math.ceil(input.length / 4);
-    runtime.write32(pkt + 4n, BigInt(payloadWords));
+    const payloadWords = 16 + Math.ceil(input.length / 4) +
+        (options.pid ? 3 : 0);
+    // A pid descriptor rides in a special header: w1 bit 31, then the flag
+    // word + 8-byte pid slot precede the descriptors (their recorded
+    // SetCurrentProcess steps[1]: w1=0x8000000e, w2=1, pid slot, ctx @0x20).
+    runtime.write32(pkt + 4n, BigInt((payloadWords |
+        (options.pid ? 0x80000000 : 0)) >>> 0));
 
     let at = 8;
+    if (options.pid) {
+        runtime.write32(pkt + BigInt(at), 1n);          // pid flag
+        at += 4 + 8;                                     // + pid slot
+    }
     for (const d of xList) {                       // X: 2 words
         const address = BigInt(d.addr);
         const word0 = ((Number(d.size) << 16) |
