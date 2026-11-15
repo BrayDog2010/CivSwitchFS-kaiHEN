@@ -1,4 +1,4 @@
-# CivSwitchFS
+# CivSwitchFS + kaiHEN
 
 > [!IMPORTANT]
 > Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepsipu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart:
@@ -7,13 +7,15 @@ This is payload provides **access to FS privileges** through an elevated fsp-srv
 
 CivSwitchFS is **semi-untethered**, RPC was fully removed :tada:
 
-Smol demo https://streamable.com/bhgobg
+Smol demo of CivSwitchFS: https://streamable.com/bhgobg
+
+Smol demo of CivSwitchFS booting KaiHEN: https://youtu.be/2pGN9HiXaZg
 
 ## Tested configuration
 
-- Nintendo Switch 2, firmware **23.0.1**
+- Nintendo Switch 2, firmware **23.0.1** (only exFAT fw tested, FAT32 should work too). Do not use on lower firmware!
 - **Civilization VII 1.0.0**, physical cartridge
-- CivSwitch Remote JS Loader already running
+- CivSwitch Remote JS Loader already running (follow [CivSwitch instructions](https://github.com/Gezine/CivSwitch))
 
 ## Requirements
 
@@ -29,20 +31,7 @@ Install dependencies once from this repository:
 npm install
 ~~~
 
-### Persist the payload (optionnal)
-
-With the CivSwitch Remote JS Loader running, install the persistent image:
-
-~~~sh
-npm run persist:install -- <console-ip> [--minify-payload]
-~~~
-
-Future launches from that save start the exploit, loader, and
-payload automatically, without a computer or network connection. 
-
-The installer does not back up the old save. 
-
-### Persist the whole kaiHEN chain
+### Persist the whole kaiHEN chain (recommended)
 
 ```sh
 npm run persist:chain -- <console-ip>
@@ -51,7 +40,7 @@ npm run persist:chain -- <console-ip>
 Installs a persistent image that runs the promotion and the kaiHEN chain
 back to back. Every launch of the game from that save attempts the full
 sequence by itself and, when the promotion wins, ends with kaiHEN
-running — no computer attached. When the screen shows
+running, with no computer attached. When the screen shows
 `HEN IS RUNNING`, close the game normally and hold R while opening
 another game.
 
@@ -72,15 +61,8 @@ a computer, and place the release files like this:
 If a file is missing, the chain refuses right after the promotion with
 `SD files missing: …` instead of wasting the boot.
 
-The same failure modes as the wired flow apply. The promotion is a race:
-if it loses, close and reopen the game to retry. The layout stage can
-crash the game: reopen it. And **one launch is allowed per console
-boot**: after a run that reached `launch complete` (success or not),
-power-cycle the console before opening the game again. Reopening Civ 7
-on the same boot re-runs the exploit and can freeze the console.
-
 `npm run persist:install -- <console-ip>` reinstalls the promotion-only
-image and takes the chain back out of the save.
+image and takes the kaiHEN chain back out of the save.
 
 ### Launch the exploit
 
@@ -118,14 +100,7 @@ If you use the persisted payload, you ofc need to rerun the installer so its sav
 > [!NOTE]
 > You can play with the delays and MORE in `src/core/config.mjs`, try some shit (but don't brick pls) !
 
-## Example FS usage
-
-After the main payload reports success, you can send follow-up payloads and use
-the `globalThis.fspSrv` handle to perform filesystem operations.
-
-An example can be found in `examples/user-storage`.
-
-## Booting kaiHEN (homebrew enabler)
+## Booting kaiHEN manually
 
 `tools/kaihen.mjs` chains the FS access into a full [kaiHEN](https://github.com/ouncebrew/kaihen)
 boot. Once kaiHEN runs, holding R while opening a game starts hbmenu
@@ -223,4 +198,19 @@ tools/kaihen.mjs     # kaiHEN launcher: SD staging + the chain, see "Booting kai
 
 ## License
 
-The original code in this repository is distributed under the MIT license. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for detailed notices and credits.
+The original code in this repository is distributed under the MIT license. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for detailed notices/
+
+## Standing on the shoulders of giants
+
+- [Nerisma's CivSwitchFS](https://github.com/ItsNerisma/CivSwitchFS), which makes all this possible on-device. Amazing stuff.
+- [Gezine](https://github.com/Gezine/CivSwitch) for CivSwitch, the Civ7
+  entrypoint.
+- [civswitch-kit](https://gitee.com/mza1010/civswitch-kit), the original Civ7
+  FS kit, based on slapah/Hokage's work, which is itself based on ns2jb.
+- [civ7-fs](https://github.com/HerXayah/civ7-fs), the Civ7 FS port this
+  repository builds on.
+- [kurumuz](https://github.com/kurumuz) for kaiHEN and his ns2jb fork.
+- [pepsipu](https://gitlab.com/pepsipu/ns2jb) for discovering nsj2b vuln, and the ns2jb codebase.
+- epiccsolar, who got kaihen booting ~13 hours before me, this repo doesn't use her code. This is not meant to be a very public release and we'll probably use her code for that.
+- LLMs were involved in the development of this. Please don't use it if you don't trust it.
+
