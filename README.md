@@ -78,10 +78,12 @@ If a file is missing, the chain refuses right after the promotion with
 `npm run persist:install -- <console-ip>` reinstalls the promotion-only
 image and takes the kaiHEN chain back out of the save.
 
-Both installers minify the payload by default. For crash debugging,
-`--debug-payload` builds the promotion-only image with readable names;
-the unminified chain image does not fit the loader's 500 KB payload
-limit, so chain builds are always minified.
+Both installers build the payload with readable names by default. For
+crash debugging, `--debug-payload` skips all minification (promotion-only
+image — the fully unminified chain exceeds the loader's 500 KB payload
+limit). `--minify-payload` produces the smaller minified image, which
+currently fails to eval in the save path (`Unexpected identifier`) —
+don't use it until that is fixed.
 
 ### Launch CivSwitchFS by itself (not for end users)
 

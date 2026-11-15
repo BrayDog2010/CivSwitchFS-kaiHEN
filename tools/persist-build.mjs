@@ -278,7 +278,9 @@ function readOptions(args) {
     const options = {
         showText: false,
         debugPayload: false,
-        minifyPayload: true,
+        // Readable build is the default: the minified chain stage fails to
+        // eval in the save path ("Unexpected identifier", root cause open).
+        minifyPayload: false,
         chain: false
     };
     for (let index = 0; index < args.length; index++) {
@@ -297,12 +299,14 @@ function readOptions(args) {
             continue;
         }
         if (arg === "--minify-payload") {
-            // Minification is the default now; the flag stays accepted
-            // as an explicit no-op.
+            // Opt-in: the minified chain stage fails to eval in the save
+            // path ("Unexpected identifier", root cause open).
             options.minifyPayload = true;
             continue;
         }
         if (arg === "--no-minify-payload") {
+            // Readable build is the default now; the flag stays accepted
+            // as an explicit no-op.
             options.minifyPayload = false;
             continue;
         }

@@ -129,7 +129,9 @@ function parseArgs(args) {
         template: TEMPLATE,
         rebuild: true,
         debugPayload: false,
-        minifyPayload: true,
+        // Readable build is the default (minified save image fails to eval;
+        // root cause open).
+        minifyPayload: false,
         chain: false,
         payloadModeSpecified: false
     };
@@ -146,12 +148,15 @@ function parseArgs(args) {
             continue;
         }
         if (arg === "--minify-payload") {
-            // Minification is the default now; accepted as a no-op.
+            // Opt-in: the minified chain stage fails to eval in the save
+            // path ("Unexpected identifier", root cause open).
             options.minifyPayload = true;
             options.payloadModeSpecified = true;
             continue;
         }
         if (arg === "--no-minify-payload") {
+            // Readable build is the default now; the flag stays accepted
+            // as an explicit no-op.
             options.minifyPayload = false;
             continue;
         }
@@ -171,7 +176,7 @@ function parseArgs(args) {
     if (positional.length !== 1) {
         throw new Error("Usage: npm run persist:install -- <IP_SWITCH> " +
             "[--port 9026] [--no-build] [--debug-payload] [--chain] " +
-            "[--bootstrap path] [--template path]  (payload minified by default)");
+            "[--minify-payload] [--bootstrap path] [--template path]");
     }
     if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535)
         throw new Error("Port invalide");
