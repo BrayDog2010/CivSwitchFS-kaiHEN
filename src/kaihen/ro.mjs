@@ -156,7 +156,7 @@ export async function runNroOnRawThread(context, imageBytes, argsAddress,
     writeNative(source, imageBytes);
     const bss = source + BigInt(imageBytes.length);
 
-    const destination = loadNro(ro, source, imageBytes.length, bss, 0x1000);
+    const destination = loadNro(context, source, imageBytes.length, bss, 0x1000);
     check(destination > 0x100000000 && destination < 0x8000000000,
         "LoadNRO returned no destination: " + hex(destination));
 
@@ -209,7 +209,7 @@ export async function runNroOnRawThread(context, imageBytes, argsAddress,
     check(Number(joinRc) >>> 0 === 0, "pthread_join failed: " + hex(joinRc));
     const returned = Number(runtime.read64(returnSlot));
 
-    unloadNro(ro, destination);
+    unloadNro(context, destination);
     const unloadOffsets = [0, 0x10000, 0x11000, 0x12000];
     for (const offset of unloadOffsets) {
         const region = queryMemory(destination + BigInt(offset));
