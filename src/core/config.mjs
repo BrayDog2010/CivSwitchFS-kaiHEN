@@ -1,4 +1,4 @@
-// Enable low-level logs and per-wave timing spans when diagnosing failed windows.
+// Start with verbose summaries disabled; controller Y toggles the mode.
 export const VERBOSE_LOGGING = false;
 
 export function createFspIdentityConfig() {
@@ -39,14 +39,9 @@ export function createFspIdentityConfig() {
       0x01, 0x00
   ];
 
-  // CivSwitchFS original SLEEP offsets in nanoseconds; the canary loop may
-  // retune them from measured role spans, within a bounded drift.
-  // Slapah/Kurumuz reference: [0, 300000, 350000, 450000, 550000, 650000,
-  //                           1700000, 2000000, 2150000, 2800000].
-  var roleDelays = [0, 300000, 350000, 450000, 550000, 650000,
-                    1000000, 1200000, 1300000, 1700000];
-  // Guard delays after groupReleased, in nanoseconds.
-  // Slapah/Kurumuz reference: [0, 150000].
+  // Built-in SLEEP offsets in nanoseconds; the canary loop may retune them
+  // from measured role spans, within a bounded drift.
+  var roleDelays = [0, 300000, 350000, 450000, 550000, 650000, 1000000, 1200000, 1300000, 1700000];
   var guardDelays = [150000, 300000];
   var roleLabels = ["commit", "bottleneck", "frag0", "frag1", "frag2", "frag3",
       "canary", "filler0", "filler1", "release", "guard0", "guard1", "trigger"];
