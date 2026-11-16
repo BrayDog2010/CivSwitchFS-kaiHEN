@@ -20,8 +20,9 @@ export const SD_MANIFEST = {
     "game": {path: "/kaihen/bin/game/main", size: 62943},
     // Payload files, not chain-critical: the HEN boots without them
     // (hbmenu is what holding R opens; programs/ is OunceShell).
-    "hbmenu": {path: "/hbmenu.nro", size: 11782782, optional: true},
-    "programs": {path: "/switch/ounceshell.nro", size: 22286667, optional: true}
+    "hbmenu": {path: "/hbmenu.nro", size: 11790974, optional: true},
+    "programs": {path: "/switch/ounceshell/ounceshell.nro", size: 22294859,
+        optional: true}
 };
 
 export function khLog(message) {

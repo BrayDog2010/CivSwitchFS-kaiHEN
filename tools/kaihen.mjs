@@ -6,7 +6,8 @@
 //   node tools/kaihen.mjs CONSOLE-IP [--dir DIR] [--status-only]
 //                         [--force] [--no-hbmenu] [--no-programs]
 //
-// DIR is the unpacked kaiHEN release (default: kaiHEN-20261114d next to this
+// DIR is the unpacked kaiHEN release, in our SD-shaped layout (default:
+// kaiHEN-20261116 next to this
 // repository). The main CivSwitchFS payload must have succeeded on this boot.
 
 import fs from "node:fs";
@@ -29,7 +30,7 @@ const sdPath = {
     "hen": "/kaihen/bin/hen/main",
     "game": "/kaihen/bin/game/main",
     "hbmenu": "/hbmenu.nro",
-    "programs": "/switch/ounceshell.nro"
+    "programs": "/switch/ounceshell/ounceshell.nro"
 };
 
 function usage(code) {
@@ -126,7 +127,11 @@ function send(host, port, code, label) {
     });
 }
 
-const localFiles = {
+// Two ship layouts are supported, auto-detected per run:
+// - official: the upstream kaiHEN release zip as extracted (bootstrap.bin
+//   at the root, ro/main, hen/main, game/main, programs/ounceshell.nro)
+// - shaped: our release format, already in the SD layout
+const officialFiles = {
     "bootstrap": "bootstrap.bin",
     "ro": "ro/main",
     "hen": "hen/main",
@@ -135,10 +140,22 @@ const localFiles = {
     "programs": "programs/ounceshell.nro"
 };
 
+const shapedFiles = {
+    "bootstrap": "kaihen/bin/bootstrap.bin",
+    "ro": "kaihen/bin/ro/main",
+    "hen": "kaihen/bin/hen/main",
+    "game": "kaihen/bin/game/main",
+    "hbmenu": "hbmenu.nro",
+    "programs": "switch/ounceshell/ounceshell.nro"
+};
+
 async function manifestFor(options) {
     const names = ["bootstrap", "ro", "hen", "game",
         ...(options.hbmenu ? ["hbmenu"] : []),
         ...(options.programs ? ["programs"] : [])];
+    const shaped = await fsp.access(path.join(options.ship,
+        "kaihen/bin/bootstrap.bin")).then(() => true, () => false);
+    const localFiles = shaped ? shapedFiles : officialFiles;
     const files = [];
     for (const name of names) {
         const source = path.join(options.ship, localFiles[name]);
