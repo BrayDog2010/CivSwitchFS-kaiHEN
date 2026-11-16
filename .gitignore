@@ -11,3 +11,6 @@ logs/
 
 # Tests
 test-payloads/
+
+# Launcher-generated kaiHEN payload (part 2 of the split chain)
+.build/
