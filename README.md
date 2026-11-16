@@ -31,7 +31,7 @@ Beware that fs vuln can be risky to utilize and may corrupt things like your sav
 - Nintendo Switch 2, firmware **23.0.1** (only exFAT fw tested, FAT32 should work too). Do not use on lower firmware!
 - **Civilization VII 1.0.0**, physical cartridge
 - CivSwitch Remote JS Loader already running (follow [CivSwitch instructions](https://github.com/Gezine/CivSwitch))
-- kaiHEN 20261114d (later versions may not work)
+- kaiHEN 20261116 (later versions may not work)
 
 ### Requirements
 
@@ -140,7 +140,7 @@ var guardDelays = [150000, 300000];
 boot. Once kaiHEN runs, holding R while opening a game starts hbmenu
 instead of the game. kaiHEN normally starts from SmileBASIC (a Switch
 game with a built-in BASIC interpreter); this chain starts it from
-Civilization VII. Tested with the **20261114d** release
+Civilization VII. Tested with the **20261116** release
 on firmware 23.0.1, both docked (Ethernet) and undocked (WiFi).
 
 On top of the usual setup you need:
@@ -153,7 +153,7 @@ Run the exploit first, wait for the success line, then the launcher:
 
 ```sh
 npm run send -- <console-ip>      # wait for "You just Civ Sevened"
-node tools/kaihen.mjs <console-ip> --dir /path/to/kaiHEN-20261114d
+node tools/kaihen.mjs <console-ip> --dir /path/to/kaiHEN-20261116
 ```
 
 A successful run ends with:
@@ -178,7 +178,7 @@ want to keep it.
 
 | Option | Effect |
 |---|---|
-| `--dir DIR` | kaiHEN release folder (default `../kaiHEN-20261114d` from the repo root) |
+| `--dir DIR` | kaiHEN release folder, in our SD-shaped layout (default `../kaiHEN-20261116` from the repo root) |
 | `--status-only` | report SD state and exit |
 | `--force` | restage files even when their size already matches |
 | `--no-hbmenu`, `--no-programs` | skip staging those files |
