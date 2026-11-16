@@ -180,8 +180,6 @@ export async function run() {
             : "Normal logging is on (controller Y enables verbose summaries).");
         await emitStage("Checking for saved timings...");
         for (let attempt = 1; attempt <= attemptLimit; attempt++) {
-            if (attempt === 1)
-                await emitStage("CivSwitchFS by Nerisma");
             if (timingPersistence.stopRequested) return;
             await emitStage("======== ATTEMPT " + attempt + " ========");
             if (timingPersistence.stopRequested) return;
