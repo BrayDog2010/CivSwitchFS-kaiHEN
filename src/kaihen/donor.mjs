@@ -190,7 +190,10 @@ export async function cleanupDonor(context) {
     const handle = mount.handle;
     try {
         for (const item of donor.files) {
-            if (item.removed || !item.created) continue;
+            // Remove reused leftovers too: a prior run's files (reused this
+            // run with matching hashes) would otherwise stay in the save
+            // forever and make "donor files removed" vacuous (run165).
+            if (item.removed) continue;
             check(item.verified, "donor file /" + item.name + " was never verified");
             const opened = savePathPacket(context, handle, 8, item.name, [1, 0, 0, 0]);
             const child = oneMovedHandle(opened, "donor verify /" + item.name);
