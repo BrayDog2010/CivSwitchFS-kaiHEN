@@ -221,10 +221,15 @@ function chunkPayload(base64) {
 
 async function main() {
     const options = parse(process.argv.slice(2));
+    // Same layout probe as manifestFor: shaped ships keep the chain files
+    // under kaihen/bin/, official zips at the root.
+    const shaped = await fsp.access(path.join(options.ship,
+        "kaihen/bin/bootstrap.bin")).then(() => true, () => false);
+    const prefix = shaped ? "kaihen/bin/" : "";
     for (const file of ["bootstrap.bin", "ro/main", "hen/main", "game/main"]) {
-        const present = fs.statSync(path.join(options.ship, file),
+        const present = fs.statSync(path.join(options.ship, prefix + file),
             {throwIfNoEntry: false})?.isFile();
-        if (!present) throw Error(`Missing ${path.join(options.ship, file)}`);
+        if (!present) throw Error(`Missing ${path.join(options.ship, prefix + file)}`);
     }
     const files = await manifestFor(options);
     const total = files.reduce((sum, file) => sum + file.size, 0);
