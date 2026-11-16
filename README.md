@@ -1,15 +1,17 @@
 # CivSwitchFS-kaiHEN
 
 > [!IMPORTANT]
-> Thanks to **Slapah** for the ns2jb filesystem port to CivSwitch and **Kurumuz** for the improved fork of ns2jb from **Pepsipu**, which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart: This is a fork of CivSwitchFS which is by **Nerisma**, who did the difficult work of getting FS acquisition work locally!
+> Thanks to [**Slapah**](https://github.com/byizmysh/IZCIVSwitch/blob/main/NOTICE.md#upstream) for the ns2jb filesystem port to CivSwitch and [**Kurumuz**](https://gitlab.com/kurumuz/ns2jb) for the improved fork of ns2jb from [**pepsipu**](https://gitlab.com/pepsipu/ns2jb), which laid the groundwork for this research. All kudos goes to them for the Civ FS port :heart: This is a fork of CivSwitchFS which is by **Nerisma**, who did the difficult work of getting FS acquisition work locally!
 
 CivSwitchFS provides **access to FS privileges** through an elevated fsp-srv handle. It runs inside the **CivSwitch Remote JS Loader**. The FS access can be chained into a full **kaiHEN boot** (homebrew enabler), which is what this fork provides, see [Booting kaiHEN](#usage).
 
-CivSwitchFS is **semi-untethered**, RPC was fully removed :tada:
+## A bit of a preface
 
 Smol demo of CivSwitchFS: https://streamable.com/bhgobg
 
 Smol demo of CivSwitchFS booting KaiHEN: https://youtu.be/2pGN9HiXaZg (skip from 0:40 to 4:00)
+
+CivSwitchFS is **semi-untethered**, RPC was fully removed :tada: ! It should also be more consistent for any hardware.
 
 ## Repo state
 
@@ -19,14 +21,19 @@ There will be updates, and you'll need to update manually.
 
 Beware that fs vuln can be risky to utilize and may corrupt things like your save file, or more. If you want minimal brick risk, then wait on.
 
-## Tested configuration
+**It's intended for devs**, as all I give is a god `fsp-srv` handle (full FS) for you to play with. The rest is for you to figure out.
+
+> [!NOTE] 
+> If you are looking for a **reliable KaiHEN access**, this [fork](https://github.com/s8n/CivSwitchFS/tree/slop) from [@Ave](https://github.com/aveao) will get you there in no time.
+
+### Tested configuration
 
 - Nintendo Switch 2, firmware **23.0.1** (only exFAT fw tested, FAT32 should work too). Do not use on lower firmware!
 - **Civilization VII 1.0.0**, physical cartridge
 - CivSwitch Remote JS Loader already running (follow [CivSwitch instructions](https://github.com/Gezine/CivSwitch))
 - kaiHEN 20261114d (later versions may not work)
 
-## Requirements
+### Requirements
 
 - Node.js **20 or later** and npm
 - A Switch 2 with the CivSwitch Remote JS Loader already running and reachable on the local network when installing persistence or sending a payload
@@ -109,29 +116,23 @@ npm run send -- <console-ip>
 Wait for **`You just Civ Sevened your machine, congrats`** which obviously means success :tada: !
 Then, the loader automatically shows `Awaiting payload at <ip>:9026` and you are free to send payloads.
 
-### Booting faster next time (this will be automatised eventually)
+### Timing calibration
 
-After success, the payload prints the working `roleDelays` and `guardDelays`
-values in nanoseconds. To use them as the starting schedule next time, replace
-the arrays in [`src/core/config.mjs`](src/core/config.mjs#L44-L47):
+Without a valid saved timing file, the payload starts with this schedule, in nanoseconds:
 
 ~~~js
 var roleDelays = [0, 300000, 350000, 450000, 550000, 650000, 1000000, 1200000, 1300000, 1700000];
 var guardDelays = [150000, 300000];
 ~~~
 
-The trigger's initial sleep is 1,600,000 ns. The Slapah/Kurumuz
-reference schedule used theses instead (might help if it worked for you on those)
-
-~~~js
-var roleDelays = [0, 300000, 350000, 450000, 550000, 650000, 1700000, 2000000, 2150000, 2800000];
-var guardDelays = [0, 150000];
-~~~
-
-If you use the persisted payload, you ofc need to rerun the installer so its saved image includes the new timings.
-
 > [!NOTE]
-> You can play with the delays and MORE in `src/core/config.mjs`, try some shit (but don't brick pls) !
+> If timings were adjusted during a successful run, they will be saved under `save:/civswitchfs/timings.json` and will be reused the next time the exploit is beeing executed.
+
+### Controls
+
+- **X**: restore the original timings (starting next attempt)
+- **B**: stops after the current wave clean up
+- **Y**: toggle between normal and verbose summaries
 
 ## Booting kaiHEN manually
 
@@ -213,6 +214,7 @@ of the reference implementation built on
 
 - The auto timing calibration is not perfect yet, some freezes can happen
 - Timing configuration, retries and shit will go to a persisted config file soon enough
+- THERE IS SO MUCH MORE to be done, I'm just releasing now so you guys can study the semi-untethered stuff
 - You can learn about how the exploit works [there](https://github.com/ItsNerisma/CivSwitchFS/blob/main/HOW_IT_WORKS.md)
 
 ## Project structure
@@ -227,6 +229,14 @@ persist/             # persistence builder inputs, save codec, writer, and insta
 tools/               # well, tools
 tools/kaihen.mjs     # kaiHEN launcher: SD staging + the chain, see "Booting kaiHEN"
 ```
+
+## Credits
+
+- **[Gezine/CivSwitch](https://github.com/Gezine/CivSwitch)**: userland exploit and persistent installer
+- **[pepsipu/ns2jb](https://gitlab.com/pepsipu/ns2jb)**: og FS exploit
+- **Slapah/CivSwitch**: first true working ns2jb port for Civ. Sadly after his code beeing stole, he chose to nuke it.
+- **[Kurumuz/ns2jb](https://gitlab.com/kurumuz/ns2jb)**: improved version of ns2jb
+
 
 ## License
 

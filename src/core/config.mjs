@@ -1,4 +1,4 @@
-// Enable low-level logs and per-wave timing spans when diagnosing failed windows.
+// Start with verbose summaries disabled; controller Y toggles the mode.
 export const VERBOSE_LOGGING = false;
 
 export function createFspIdentityConfig() {
