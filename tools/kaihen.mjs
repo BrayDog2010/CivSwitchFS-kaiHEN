@@ -19,7 +19,9 @@ import {fileURLToPath} from "node:url";
 import {buildPayload, ROOT} from "./bundle.mjs";
 
 const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_SHIP = path.join(ROOT_DIR, "..", "kaiHEN-20261116");
+// ROOT is the repo root; the default ship sits NEXT TO the repo
+// (../kaiHEN-20261116), per the README.
+const DEFAULT_SHIP = path.join(ROOT, "..", "kaiHEN-20261116");
 const TIMEOUT_MS = 900_000;
 
 const sdPath = {
