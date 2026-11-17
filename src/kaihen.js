@@ -42,7 +42,6 @@ import {openSdCard, sdGetEntryType, sdReadFile, sdWriteFile, sdOpenFile,
 import {RO_TITLE, readU64LE, arenaAlloc, track, u64Bytes, bytesToHex}
     from "./kaihen/state.mjs";
 import {buildCmif, bareSendTransport, cmifSend} from "./kaihen/wire.mjs";
-import {sha256} from "./kaihen/sha256.mjs";
 
 const {waitMs, closeHandle, log, sendIPC} = coreRuntime;
 
@@ -476,8 +475,7 @@ export async function run() {
             check(codefs.added, "donor requires a domain-added CodeFS object");
             const npdm = await captureCodeFile(context, codefs.added,
                 "main.npdm");
-            await khLog("captured main.npdm (" + npdm.size + " bytes, sha " +
-                npdm.sha256.slice(0, 12) + ")");
+            await khLog("captured main.npdm (" + npdm.size + " bytes)");
             const sd = openSdCard(context);
             const roMain = sdReadFile(context, sd,
                 globalThis.__KH_MANIFEST.ro.path, 0x100000);
@@ -550,6 +548,46 @@ export async function run() {
         await khLog("completed stages: " + stages.join(" > "));
         throw error;
     } finally {
+        // Retire the IStorage cache alias so stale heap pointers don't
+        // persist in the BC save.  Every writeFs call during the chain
+        // wrote heap-targeted bytes into the dirty buffer via
+        // write-through; intermediate commits (donor, cleanupDonor)
+        // flushed them to NAND.
+        //
+        // A plain ipcStorageWrite at offset 0 goes through the alias
+        // and lands in the heap, not the save. Invalidating the I/O
+        // cache first drops the dirty buffer entries so the subsequent
+        // write bypasses the alias and reaches the backing store.
+        try {
+            if (context.candidateHandle) {
+                runtime.ipcStorageInvalidate(
+                    context.candidateHandle, 0, 0x8000);
+
+                const retireBuf = runtime.allocPage(0x1000);
+                for (let i = 0; i < 16; i++)
+                    runtime.write8(retireBuf + BigInt(i), 0x42n);
+                runtime.ipcStorageWrite(
+                    context.candidateHandle, 0n, retireBuf, 16);
+
+                const saveMount = runtime.openMount("save");
+                if (saveMount && saveMount.handle) {
+                    const pkt = runtime.allocPage(0x2000);
+                    const commitReply = cmifSend(saveMount.handle,
+                        {pkt, cmd: 10, input: [], rawWords: 8});
+                    closeHandle(saveMount.handle);
+                    await khLog("RETIRE: cache invalidated + " +
+                        "alias neutralised tx=" +
+                        hex(commitReply.transport || 0) +
+                        " rc=" + hex(commitReply.result || 0));
+                }
+            }
+        } catch (retireError) {
+            try {
+                await khLog("RETIRE: best-effort failed: " +
+                    String(retireError?.message || retireError));
+            } catch (_) { /* silent */ }
+        }
+        
         if (!context.henStartup) {
             // Failed run: release every tracked handle (reverse order) so the
             // boot stays reusable — leaked sm/pm sessions otherwise exhaust

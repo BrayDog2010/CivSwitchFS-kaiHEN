@@ -1,12 +1,24 @@
 import coreRuntime from "../runtime.mjs";
+import {emitVerboseStage} from "../log-stage.mjs";
 
 const {
   closeHandle,
   hex32,
   ipcCommitChecked,
   ipcDeleteDirectoryRecursivelyChecked,
+  ipcDeleteFileChecked,
+  ipcGetEntryTypeChecked,
+  ipcFileInvalidate,
   log
 } = coreRuntime;
+
+// kaiHEN's donor pair sits at the root of the game's save: /main (the RO
+// image) and /main.npdm (the captured policy). It is deliberately KEPT —
+// the next kaiHEN run reuses it by hash instead of rewriting the save, so
+// this every-boot cleanup must not wipe it (see kaihen/donor.mjs). Only the
+// kaiHEN donor stage may remove the pair, and only when its content no
+// longer matches. Put the names back in this list to restore the wipe.
+const DONOR_LEFTOVER_FILES = [];
 
 // ── Cleanup and retirement (S19–S21) ────────────────────────────────────────
 
@@ -18,8 +30,9 @@ export async function retireCandidateCacheAndClose({
   retireRetainedEndpoint,
   workerStateSafe,
 }) {
-    // S21: Retire the synthetic cache entry before closing the candidate.
+    // S21: Verify the synthetic cache entry, retiring it only if needed.
     let candidateCacheRetired = false;
+    let candidateCacheRetirementSkipped = false;
     var candidateCloseSafe = workerStateSafe;
     var workersQuiesced = workerStateSafe === true;
     var stateSafe = workerStateSafe === true;
@@ -97,6 +110,7 @@ export async function retireCandidateCacheAndClose({
         stateSafe = workersQuiesced;
         candidateCloseSafe = retirement.ok && workersQuiesced;
         candidateCacheRetired = retirement.candidateCacheRetired;
+        candidateCacheRetirementSkipped = retirement.retirementSkipped === true;
         if (!retirement.ok)
             retirementFailureReason = "candidate-cache-retirement-failed";
         addressCopy = {...retirement.addressCopy, candidateCacheRetired};
@@ -110,8 +124,8 @@ export async function retireCandidateCacheAndClose({
             if (candidateCloseResult !== 0)
                 retirementFailureReason = "candidate-close-failed";
         } catch (closeError) {
-            // The cache entry is already retired. A failed close leaks the
-            // service handle, but does not leave a live cache alias behind.
+            // Cache safety was verified before close. A failed close leaks the
+            // service handle, but does not leave an active cache alias behind.
             candidateHandle = 0;
             retirementFailureReason = "candidate-close-threw: " +
                 closeError.message;
@@ -124,6 +138,7 @@ export async function retireCandidateCacheAndClose({
     }
 
   return {ok: true, addressCopy, candidateCacheRetired, candidateHandle,
+      candidateCacheRetirementSkipped,
       workerStateSafe: stateSafe, workersQuiesced, candidateCloseResult,
       failureReason: retirementFailureReason};
 }
@@ -147,7 +162,8 @@ export async function cleanupScratchAndHandles({
   temporaryHandle,
   triggerHandle,
   workerStateSafe,
-  keepDomainSessionOpen = false
+  keepDomainSessionOpen = false,
+  dirtyFileSize = 0
 }) {
     // S22: Cleanup. Report a failed or skipped cleanup as unsafe to retry.
     var cleanupAttempted = false;
@@ -155,6 +171,7 @@ export async function cleanupScratchAndHandles({
     var cleanupRemoveResult = null;
     var cleanupCommitTransport = null;
     var cleanupCommitResult = null;
+    var cleanupDonorWiped = 0;
     var cleanupHandlesClosed = 0;
     var cleanupExpectedHandles = 0;
     var cleanupCloseFailures = [];
@@ -185,7 +202,41 @@ export async function cleanupScratchAndHandles({
             countExpectedHandle(domainSession.handle);
         countExpectedHandle(rootSession);
         cleanupAttempted = true;
+        var cacheInvalidateResult = null;
+        if (dirtyFileSize > 0 && SCRATCH_DIR) {
+            try {
+                cacheInvalidateResult = ipcFileInvalidate(
+                    savedHandle, SCRATCH_DIR + "/big8", dirtyFileSize);
+            } catch (error) {
+                cacheInvalidateResult = "throw:" + String(error);
+            }
+            await emitVerboseStage("CLEANUP: cache invalidate " + SCRATCH_DIR +
+                "/big8 result=" + (typeof cacheInvalidateResult === "number"
+                    ? hex32(cacheInvalidateResult) : cacheInvalidateResult));
+        }
         await log("CLEANUP: removing " + SCRATCH_DIR + " and committing");
+        // Donor leftovers would ride the same commit: absent files are
+        // skipped silently, and a present file that fails to delete is a
+        // real cleanup failure. The list is empty by default because the
+        // donor pair is kept on purpose (DONOR_LEFTOVER_FILES above).
+        for (var di = 0; di < DONOR_LEFTOVER_FILES.length; di++) {
+            var donorFile = DONOR_LEFTOVER_FILES[di];
+            try {
+                var donorEntry = ipcGetEntryTypeChecked(savedHandle, donorFile);
+                if (donorEntry.transport !== 0 || donorEntry.result !== 0)
+                    continue;
+                var donorDelete = ipcDeleteFileChecked(savedHandle, donorFile);
+                if (donorDelete.transport === 0 && donorDelete.result === 0) {
+                    cleanupDonorWiped++;
+                    continue;
+                }
+                cleanupErrors.push("donor-" + donorFile + "-delete=" +
+                    (donorDelete.transport !== 0
+                        ? hex32(donorDelete.transport) : hex32(donorDelete.result)));
+            } catch (donorError) {
+                cleanupErrors.push("donor-" + donorFile + "=" + String(donorError));
+            }
+        }
         try {
             var deleteStatus = ipcDeleteDirectoryRecursivelyChecked(
                 savedHandle, SCRATCH_DIR);
@@ -246,6 +297,7 @@ export async function cleanupScratchAndHandles({
         await log("CLEANUP: " + SCRATCH_DIR +
             " deleteTx=" + cleanupDeleteTxText + " delete=" + cleanupDeleteText +
             " commitTx=" + cleanupCommitTxText + " commit=" + cleanupCommitText +
+            " donorWiped=" + cleanupDonorWiped +
             " handlesClosed=" + cleanupHandlesClosed +
             "/" + cleanupExpectedHandles +
             " closeErrors=" + (cleanupCloseFailures.join(",") || "none") +
@@ -272,6 +324,7 @@ export async function cleanupScratchAndHandles({
         deleteResult: cleanupRemoveResult,
         commitTransport: cleanupCommitTransport,
         commitResult: cleanupCommitResult,
+        donorFilesWiped: cleanupDonorWiped,
         handlesClosed: cleanupHandlesClosed,
         expectedHandles: cleanupExpectedHandles,
         closeErrors: cleanupCloseFailures,

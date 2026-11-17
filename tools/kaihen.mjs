@@ -223,16 +223,35 @@ function chunkPayload(base64) {
 
 async function main() {
     const options = parse(process.argv.slice(2));
+    // Same layout probe as manifestFor: shaped ships keep the chain files
+    // under kaihen/bin/, official zips at the root.
+    const shaped = await fsp.access(path.join(options.ship,
+        "kaihen/bin/bootstrap.bin")).then(() => true, () => false);
+    const prefix = shaped ? "kaihen/bin/" : "";
     for (const file of ["bootstrap.bin", "ro/main", "hen/main", "game/main"]) {
-        const present = fs.statSync(path.join(options.ship, file),
+        const present = fs.statSync(path.join(options.ship, prefix + file),
             {throwIfNoEntry: false})?.isFile();
-        if (!present) throw Error(`Missing ${path.join(options.ship, file)}`);
+        if (!present) throw Error(`Missing ${path.join(options.ship, prefix + file)}`);
     }
     const files = await manifestFor(options);
+    // Part 2 of the split persistent chain: the kaiHEN bundle itself,
+    // staged like a ship file at /kaihen/payload.js. src/chain-sd.mjs
+    // (the split persist entry) loads and evals it after the promotion.
+    // Optional: the embedded chain entry (src/chain.mjs) runs without it.
+    const built = await buildPayload({entry: path.join(ROOT, "src/kaihen.js")});
+    const payloadSource = path.join(ROOT, ".build", "kaihen-payload.js");
+    await fsp.mkdir(path.dirname(payloadSource), {recursive: true});
+    await fsp.writeFile(payloadSource, built.payload, "utf8");
+    files.push({name: "payload", path: "/kaihen/payload.js",
+        source: payloadSource, size: Buffer.byteLength(built.payload, "utf8"),
+        sha256: crypto.createHash("sha256")
+            .update(built.payload, "utf8").digest("hex"),
+        optional: true});
     const total = files.reduce((sum, file) => sum + file.size, 0);
     const manifestSource = `globalThis.__KH_MANIFEST = ${JSON.stringify(
         Object.fromEntries(files.map(file => [file.name,
-            {path: file.path, size: file.size}])))};`;
+            {path: file.path, size: file.size,
+                ...(file.optional ? {optional: true} : {})}])))};`;
     const port = 9026;
 
     console.log(`-- kaiHEN launcher: ${options.console}:${port} --`);
@@ -240,7 +259,6 @@ async function main() {
         `${(total / 1048576).toFixed(1)} MiB) --`);
 
     // 1. Manifest + status probe through the full bundle in status mode.
-    const built = await buildPayload({entry: path.join(ROOT, "src/kaihen.js")});
     console.log(`-- kaihen payload: ${built.bytes} bytes --`);
     await send(options.console, port,
         `(globalThis.__KH_MODE='status');${manifestSource}`, "manifest");
