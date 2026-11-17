@@ -201,38 +201,23 @@ want to keep it.
   fails with kernel `0xF601` (SessionClosed). That is the whole reason
   the debug diagnostics are opt-in.
 
-kaiHEN is by [kurumuz](https://github.com/kurumuz). The chain is a port
-of the reference implementation built on
-[civ7-fs](https://github.com/HerXayah/civ7-fs) and
-[CivSwitch](https://github.com/Gezine/CivSwitch).
+## Troubleshooting
+
+If you're having issues with a reduced success rate, etc, you should reset your save fully and reinstall. This is recommended to do once if you're moving to v2 or onwards (v2 was released 2026-11-18).
+
+- (make sure your kaiHEN files on SD are up to date)
+- Delete your Civ7 save in Settings -> Data Management
+- Remove your cartridge, press + on Civ 7, delete it too (to wipe your cache we think, as it's a cartridge game you can just plug it back in), plug your cartridge back in
+- Boot up civ7, set up civswitch somehow (again, ldn is my favorite), then FIRST make sure you got the most recent copy of this repo locally, then run: `npm run persist:chain -- your.ip.here.blarf`
+- Restart your console fully instead of just the game, just for good measure
+- Boot up civ7, let it boot up kaiHEN
+- Then all subsequent attempts to boot kaiHEN should, hopefully, be less painful.
 
 ## Notes
 
 - The auto timing calibration is not perfect yet, some freezes can happen
 - Timing configuration, retries and shit will go to a persisted config file soon enough
-- THERE IS SO MUCH MORE to be done, I'm just releasing now so you guys can study the semi-untethered stuff
 - You can learn about how the exploit works [there](https://github.com/ItsNerisma/CivSwitchFS/blob/main/HOW_IT_WORKS.md)
-
-## Project structure
-
-```text
-src/core.js          # payload entry point and flow
-src/core/            # steps, memory access, and FS communication
-src/core/config.mjs  # the whole exploit conf, tweak it if you want
-src/kaihen/          # kaiHEN chain stages (endpoint, layout, loader copy, donor, launch, bootstrap)
-examples/            # small payload usage examples
-persist/             # persistence builder inputs, save codec, writer, and installer
-tools/               # well, tools
-tools/kaihen.mjs     # kaiHEN launcher: SD staging + the chain, see "Booting kaiHEN"
-```
-
-## Credits
-
-- **[Gezine/CivSwitch](https://github.com/Gezine/CivSwitch)**: userland exploit and persistent installer
-- **[pepsipu/ns2jb](https://gitlab.com/pepsipu/ns2jb)**: og FS exploit
-- **Slapah/CivSwitch**: first true working ns2jb port for Civ. Sadly after his code beeing stole, he chose to nuke it.
-- **[Kurumuz/ns2jb](https://gitlab.com/kurumuz/ns2jb)**: improved version of ns2jb
-
 
 ## License
 
