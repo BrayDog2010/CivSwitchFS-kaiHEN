@@ -91,7 +91,7 @@ export async function buildPersistentImage(options = {}) {
         decoder + "\neval(" + decodeExpression + ");\n";
     const stageBytes = Buffer.from(stage, "ascii");
     if (!/^[\x00-\x7f]*$/.test(stage) || stageBytes.length > MAX_STAGE_BYTES)
-        throw new Error("Persistent image too large or not ASCII");
+        throw new Error("Persistent image too large or not ASCII (" + stageBytes.length + ")");
 
     const image = {
         profile: PROFILE,

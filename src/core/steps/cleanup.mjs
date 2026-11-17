@@ -12,15 +12,13 @@ const {
   log
 } = coreRuntime;
 
-// kaiHEN donor leftovers at the root of the game's save: /main (the RO
-// image) and /main.npdm (the captured policy), written by the donor
-// stage of the kaiHEN chain. A run that dies between donor and
-// donor-cleanup leaves them behind; they are reused or replaced by the
-// next donor stage, but only the kaiHEN side would remove them. Wiping
-// them here means CivSwitchFS's own cleanup — which runs every boot,
-// promotion-only or chained — starts every kaiHEN run from a clean
-// donor root.
-const DONOR_LEFTOVER_FILES = ["/main", "/main.npdm"];
+// kaiHEN's donor pair sits at the root of the game's save: /main (the RO
+// image) and /main.npdm (the captured policy). It is deliberately KEPT —
+// the next kaiHEN run reuses it by hash instead of rewriting the save, so
+// this every-boot cleanup must not wipe it (see kaihen/donor.mjs). Only the
+// kaiHEN donor stage may remove the pair, and only when its content no
+// longer matches. Put the names back in this list to restore the wipe.
+const DONOR_LEFTOVER_FILES = [];
 
 // ── Cleanup and retirement (S19–S21) ────────────────────────────────────────
 
@@ -217,10 +215,10 @@ export async function cleanupScratchAndHandles({
                     ? hex32(cacheInvalidateResult) : cacheInvalidateResult));
         }
         await log("CLEANUP: removing " + SCRATCH_DIR + " and committing");
-        // Donor leftovers ride the same commit: absent files are skipped
-        // silently (the common case), and a present file that fails to
-        // delete is a real cleanup failure — it feeds cleanupErrors and
-        // fails verification below.
+        // Donor leftovers would ride the same commit: absent files are
+        // skipped silently, and a present file that fails to delete is a
+        // real cleanup failure. The list is empty by default because the
+        // donor pair is kept on purpose (DONOR_LEFTOVER_FILES above).
         for (var di = 0; di < DONOR_LEFTOVER_FILES.length; di++) {
             var donorFile = DONOR_LEFTOVER_FILES[di];
             try {

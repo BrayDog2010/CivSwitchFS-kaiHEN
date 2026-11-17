@@ -42,7 +42,6 @@ import {openSdCard, sdGetEntryType, sdReadFile, sdWriteFile, sdOpenFile,
 import {RO_TITLE, readU64LE, arenaAlloc, track, u64Bytes, bytesToHex}
     from "./kaihen/state.mjs";
 import {buildCmif, bareSendTransport, cmifSend} from "./kaihen/wire.mjs";
-import {sha256} from "./kaihen/sha256.mjs";
 
 const {waitMs, closeHandle, log, sendIPC} = coreRuntime;
 
@@ -476,8 +475,7 @@ export async function run() {
             check(codefs.added, "donor requires a domain-added CodeFS object");
             const npdm = await captureCodeFile(context, codefs.added,
                 "main.npdm");
-            await khLog("captured main.npdm (" + npdm.size + " bytes, sha " +
-                npdm.sha256.slice(0, 12) + ")");
+            await khLog("captured main.npdm (" + npdm.size + " bytes)");
             const sd = openSdCard(context);
             const roMain = sdReadFile(context, sd,
                 globalThis.__KH_MANIFEST.ro.path, 0x100000);
