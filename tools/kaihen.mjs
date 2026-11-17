@@ -7,7 +7,7 @@
 //                         [--force] [--no-hbmenu] [--no-programs]
 //
 // DIR is the unpacked kaiHEN release, in our SD-shaped layout (default:
-// kaiHEN-20261116 next to this
+// kaiHEN-20261117.1 next to this
 // repository). The main CivSwitchFS payload must have succeeded on this boot.
 
 import fs from "node:fs";
@@ -20,8 +20,8 @@ import {buildPayload, ROOT} from "./bundle.mjs";
 
 const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 // ROOT is the repo root; the default ship sits NEXT TO the repo
-// (../kaiHEN-20261116), per the README.
-const DEFAULT_SHIP = path.join(ROOT, "..", "kaiHEN-20261116");
+// (../kaiHEN-20261117.1), per the README.
+const DEFAULT_SHIP = path.join(ROOT, "..", "kaiHEN-20261117.1");
 const TIMEOUT_MS = 900_000;
 
 const sdPath = {
