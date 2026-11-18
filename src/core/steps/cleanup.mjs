@@ -1,5 +1,5 @@
 import coreRuntime from "../runtime.mjs";
-import {emitVerboseStage} from "../log-stage.mjs";
+import {verboseLog} from "../logger.mjs";
 
 const {
   closeHandle,
@@ -8,8 +8,7 @@ const {
   ipcDeleteDirectoryRecursivelyChecked,
   ipcDeleteFileChecked,
   ipcGetEntryTypeChecked,
-  ipcFileInvalidate,
-  log
+  ipcFileInvalidate
 } = coreRuntime;
 
 // kaiHEN's donor pair sits at the root of the game's save: /main (the RO
@@ -41,8 +40,6 @@ export async function retireCandidateCacheAndClose({
     if (addressCopy && addressCopy.retainedEndpointActive) {
         if (!candidateCloseSafe || !candidateHandle ||
             typeof retireRetainedEndpoint !== "function") {
-            await log("CACHE: retained endpoint retirement or candidate close " +
-                "skipped (restoration/handle state is unsafe)");
             addressCopy = {...addressCopy, retainedEndpointUnsafe: true,
                 workerStateSafe: false};
             return {ok: false, addressCopy, candidateCacheRetired,
@@ -56,8 +53,6 @@ export async function retireCandidateCacheAndClose({
                 throw new Error("retained endpoint did not confirm retirement");
             addressCopy = retainedRetirement.addressCopy || addressCopy;
         } catch (retirementError) {
-            await log("CACHE: retained endpoint retirement failed: " +
-                retirementError.message);
             addressCopy = {...addressCopy, retainedEndpointUnsafe: true,
                 workerStateSafe: false};
             return {ok: false, addressCopy, candidateCacheRetired,
@@ -69,8 +64,6 @@ export async function retireCandidateCacheAndClose({
 
         try {
             candidateCloseResult = Number(closeHandle(candidateHandle)) >>> 0;
-            await log("CACHE: retained candidate closed rc=" +
-                hex32(candidateCloseResult));
             if (candidateCloseResult !== 0) {
                 addressCopy = {...addressCopy, retainedEndpointUnsafe: true,
                     workerStateSafe: false};
@@ -85,8 +78,6 @@ export async function retireCandidateCacheAndClose({
             addressCopy = {...addressCopy, retainedEndpointActive: false,
                 retainedEndpointRetired: true, candidateCacheRetired: true};
         } catch (closeError) {
-            await log("CACHE: retained candidate close threw: " +
-                closeError.message);
             addressCopy = {...addressCopy, retainedEndpointUnsafe: true,
                 workerStateSafe: false};
             return {ok: false, addressCopy, candidateCacheRetired,
@@ -120,7 +111,6 @@ export async function retireCandidateCacheAndClose({
         try {
             candidateCloseResult = Number(closeHandle(candidateHandle)) >>> 0;
             candidateHandle = 0;
-            await log("CACHE: candidate closed rc=" + hex32(candidateCloseResult));
             if (candidateCloseResult !== 0)
                 retirementFailureReason = "candidate-close-failed";
         } catch (closeError) {
@@ -129,12 +119,10 @@ export async function retireCandidateCacheAndClose({
             candidateHandle = 0;
             retirementFailureReason = "candidate-close-threw: " +
                 closeError.message;
-            await log("CACHE: candidate close threw: " + closeError.message);
         }
     } else if (candidateHandle) {
         retirementFailureReason = retirementFailureReason ||
             "candidate-close-skipped-unsafe-state";
-        await log("CACHE: candidate close skipped (worker/cache state unsafe)");
     }
 
   return {ok: true, addressCopy, candidateCacheRetired, candidateHandle,
@@ -210,11 +198,10 @@ export async function cleanupScratchAndHandles({
             } catch (error) {
                 cacheInvalidateResult = "throw:" + String(error);
             }
-            await emitVerboseStage("CLEANUP: cache invalidate " + SCRATCH_DIR +
+            await verboseLog("CLEANUP: cache invalidate " + SCRATCH_DIR +
                 "/big8 result=" + (typeof cacheInvalidateResult === "number"
                     ? hex32(cacheInvalidateResult) : cacheInvalidateResult));
         }
-        await log("CLEANUP: removing " + SCRATCH_DIR + " and committing");
         // Donor leftovers would ride the same commit: absent files are
         // skipped silently, and a present file that fails to delete is a
         // real cleanup failure. The list is empty by default because the
@@ -294,16 +281,6 @@ export async function cleanupScratchAndHandles({
             ? "THREW" : hex32(cleanupCommitTransport);
         var cleanupCommitText = cleanupCommitResult === null
             ? "NA" : hex32(cleanupCommitResult);
-        await log("CLEANUP: " + SCRATCH_DIR +
-            " deleteTx=" + cleanupDeleteTxText + " delete=" + cleanupDeleteText +
-            " commitTx=" + cleanupCommitTxText + " commit=" + cleanupCommitText +
-            " donorWiped=" + cleanupDonorWiped +
-            " handlesClosed=" + cleanupHandlesClosed +
-            "/" + cleanupExpectedHandles +
-            " closeErrors=" + (cleanupCloseFailures.join(",") || "none") +
-            " errors=" + (cleanupErrors.join(",") || "none"));
-    } else {
-        await log("CLEANUP: skipped (" + cleanupSkipReason + ")");
     }
 
     var cleanupOk = cleanupAttempted && cleanupDeleteTransport === 0 &&
