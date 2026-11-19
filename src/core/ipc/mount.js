@@ -20,3 +20,14 @@ function getMountHandle(name) {
     const handle  = Number(read32(slots)) >>> 0;
     return { handle, objId };
 }
+
+// Clone a mount into an owned handle (kaihen donor/save access goes through
+// this). Upstream dropped it as dead code because their tree has no callers
+// — keep it for the chain build.
+function openMount(name) {
+    const mount = getMountHandle(name);
+    if (!mount) return null;
+    const handle = cloneObject(mount.handle, mount.objId);
+    if (!handle) return null;
+    return { handle, objId: mount.objId, borrowed: mount.handle };
+}

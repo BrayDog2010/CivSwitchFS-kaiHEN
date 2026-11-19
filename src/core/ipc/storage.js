@@ -105,3 +105,18 @@ function cloneFsSession(sourceHandle) {
     if (reply.result !== 0 || reply.moves.length === 0) return 0;
     return reply.moves[0];
 }
+
+// IStorage OperateRange invalidate (kaihen rewrites save data through this
+// after promotion). Upstream dropped it as dead code because their tree has
+// no callers — keep it for the chain build.
+function ipcStorageInvalidate(storageHandle, offset, size) {
+    var pkt = allocPage(0x2000);
+    prepPacket(pkt, 4, 0x0C, []);
+    write32(pkt + 0x10n, 0x49434653n);
+    write32(pkt + 0x18n, 5n);                    // cmd 5 = OperateRange
+    write32(pkt + 0x20n, 2n);                    // operation = 2 (invalidate)
+    write64(pkt + 0x28n, BigInt(offset));         // offset
+    write64(pkt + 0x30n, BigInt(size));           // size
+    sendIPC(storageHandle, pkt);
+    return cmifReply(pkt).result;
+}

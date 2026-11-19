@@ -209,6 +209,19 @@ function startRawWorker(worker) {
     return 0;
 }
 
+// Create and start a raw worker in one step (kaihen spinread/threadsend
+// launch their pump threads through this). Upstream dropped it as dead
+// code because their tree has no callers — keep it for the chain build.
+function launchRawWorker(frameAddr, scheduling, reusable) {
+    var worker = createRawWorker(frameAddr, scheduling, reusable);
+    if (worker.rc !== 0) return worker;
+    if (startRawWorker(worker) !== 0) {
+        call_rop(F_CloseHandle, BigInt(worker.handle));
+        worker.handle = 0;
+    }
+    return worker;
+}
+
 // Wait for a raw thread to finish using svcWaitSynchronization.
 // Returns true if the thread exited, false on timeout.
 function waitRawThread(handle, timeoutNs, reusableWaitBuf) {
