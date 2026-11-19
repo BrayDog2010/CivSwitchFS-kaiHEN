@@ -54,6 +54,18 @@ function writeStr(buf, str) {
     write8(buf + BigInt(str.length), 0n);
 }
 
+// Used by the kaihen chain payload (src/kaihen/state.mjs destructures it
+// from the core API; SD staging reads sink chunks through it). Upstream
+// removed it as dead code because nothing in their tree references it —
+// keep it for the chain build.
+function read_bytes(addr, len) {
+    const out = [];
+    for (let i = 0; i < len; i++) {
+        out.push(Number(read8(addr + BigInt(i))));
+    }
+    return out;
+}
+
 function write_bytes(addr, bytes) {
     for (let i = 0; i < bytes.length; i++) {
         write8(addr + BigInt(i), BigInt(bytes[i]));
