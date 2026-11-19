@@ -131,7 +131,8 @@ async function sdFileStatus(context) {
 // /kaihen/kaihen-civswitch.json, shipped BY the kaiHEN release, declares
 // which CivSwitchFS-kaihen payload versions it supports:
 //
-//   {"support": {"v3": {"/kaihen/bin/hen/main": 78765, ...}},
+//   {"latest_version": "v3",
+//    "support": {"v3": {"/kaihen/bin/hen/main": 78765, ...}},
 //    "skip_version_check": false}
 //
 // The per-version object is the SD file list for that payload: filename
@@ -139,10 +140,17 @@ async function sdFileStatus(context) {
 // replaces the built-in manifest (the release is authoritative for what
 // it ships). When it does not, we refuse to run — unless
 // skip_version_check is true, or the whole file is absent (old release,
-// loud warning, built-in manifest).
+// loud warning, built-in manifest). "latest_version" is informational:
+// when it names a version newer than ours, the end of a successful run
+// prints an all-caps update-available notice.
 
 const SUPPORT_JSON_PATH = "/kaihen/kaihen-civswitch.json";
 const SUPPORT_JSON_MAX = 0x10000;
+const VERSION_KEY = "v" + PAYLOAD_VERSION;
+
+// "latest_version" from the descriptor, kept for the end-of-run update
+// notice ("a newer civswitchfs-kaihen exists — update whenever you can").
+let supportedLatestVersion = null;
 
 function bytesToText(bytes) {
     // Chunked: String.fromCharCode.apply has an argument limit far
@@ -216,13 +224,18 @@ async function resolveSupportManifest(context) {
         }
     }
 
-    const versionKey = "v" + PAYLOAD_VERSION;
+    const versionKey = VERSION_KEY;
     const support = descriptor && typeof descriptor === "object" &&
         !Array.isArray(descriptor) && descriptor.support &&
         typeof descriptor.support === "object" &&
         !Array.isArray(descriptor.support) ? descriptor.support : null;
     const skipCheck = descriptor && descriptor.skip_version_check === true;
     const files = support ? support[versionKey] : null;
+    supportedLatestVersion =
+        descriptor && typeof descriptor.latest_version === "string" &&
+        descriptor.latest_version.length > 0 &&
+        descriptor.latest_version.length <= 16 ?
+        descriptor.latest_version : null;
 
     if (!present || !descriptor) {
         await khLog("WARNING: " + SUPPORT_JSON_PATH + (present ?
@@ -685,6 +698,18 @@ export async function run() {
         await khLog("Close Civilization VII normally; hold R while opening " +
             "a Switch 2 game twice.");
         stageDone("complete", {ok: true});
+
+        // Update notice (from the release descriptor's "latest_version"):
+        // our version ran fine, but a newer one exists. Informational —
+        // the user updates whenever they can.
+        if (supportedLatestVersion &&
+            supportedLatestVersion.toLowerCase() !== VERSION_KEY) {
+            await khLog("UPDATE AVAILABLE: THE INSTALLED KAIHEN RELEASE " +
+                "LISTS " + supportedLatestVersion.toUpperCase() +
+                " AS THE LATEST CIVSWITCHFS-KAIHEN, BUT THIS CHAIN RAN " +
+                VERSION_KEY.toUpperCase() + ". REINSTALL OR UPDATE " +
+                "CIVSWITCHFS-KAIHEN WHENEVER YOU CAN.");
+        }
     } catch (error) {
         await khLog("FAILED at stage '" +
             (stages.length ? stages[stages.length - 1] : "?") + "': " +
