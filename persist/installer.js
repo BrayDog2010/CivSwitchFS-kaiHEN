@@ -312,8 +312,11 @@ window.__cfsCreateInstaller = function (options) {
                                 : 'Commit failed'
                         );
                     installed = true;
-                    // Kept: tools/persist-install.mjs waits for this exact
-                    // line as its completion marker.
+                    // Save-side UI status only; the status forwarder in the
+                    // bootstrap suppresses "Installed.*" from the log — the
+                    // completion line is logged once by the CLI wrapper
+                    // (tools/persist-install.mjs runTask) after this
+                    // resolves, and the CLI matches that copy as its marker.
                     state('Installed. Restart the game, then open Load Game menu.');
                     return report;
                 } finally {
