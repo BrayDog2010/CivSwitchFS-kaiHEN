@@ -5,6 +5,7 @@
 // See README.md and HOW_IT_WORKS.md for full details.
 
 import coreRuntime, {waitMs} from "./core/runtime.mjs";
+import {PAYLOAD_VERSION} from "./version.mjs";
 import {createFspIdentityConfig, VERBOSE_LOGGING} from "./core/config.mjs";
 import {
   borrowRawThreadScheduling,
@@ -188,6 +189,7 @@ export async function run() {
             "Thanks to Pespipu (original ns2jb)\n" +
             "Thanks to Kurumuz (ns2jb improvements)\n" +
             "Thanks to Alula (exploit stability improvements)\n");
+        await log("CivSwitchFS-kaihen payload v" + PAYLOAD_VERSION);
         await log(isVerboseLogging()
             ? "Verbose logging is on (controller Y toggles the mode)."
             : "Normal logging is on (controller Y enables verbose summaries).");
